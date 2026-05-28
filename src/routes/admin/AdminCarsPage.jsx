@@ -148,7 +148,7 @@ export function AdminCarsPage() {
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#4361ee]">Fleet management</p>
+          <p className="text-sm font-bold uppercase tracking-[0.16em] text-[rgb(59_130_246_/_0.5)]">Fleet management</p>
           <h1 className="mt-2 text-[28px] font-extrabold text-[#1e293b]">Cars</h1>
         </div>
         <Button onClick={openAddForm} leftIcon={<Plus className="h-4 w-4" />}>Add Car</Button>
@@ -172,7 +172,7 @@ export function AdminCarsPage() {
               </thead>
               <tbody className={isLoading && !cars.length ? "opacity-50" : ""}>
                 {cars.map((car) => (
-                  <tr key={car.id} className={`border-b border-[#f1f5f9] transition ${editingCar?.id === car.id ? 'bg-[#4361ee]/5' : 'hover:bg-[#f8fafc]'}`}>
+                  <tr key={car.id} className={`border-b border-[#f1f5f9] transition ${editingCar?.id === car.id ? 'bg-[rgb(59_130_246_/_0.5)]/5' : 'hover:bg-[#f8fafc]'}`}>
                     <td className="px-5 py-4">
                       <span className="inline-flex items-center gap-3">
                         {car.images?.[0] ? (
@@ -190,7 +190,7 @@ export function AdminCarsPage() {
                     <td className="px-5 py-4 font-bold text-[#1e293b]">{formatMoney(car.pricePerDay)}</td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center gap-1 text-xs font-semibold ${
-                        (car.images?.length || 0) > 0 ? 'text-[#4361ee]' : 'text-[#f59e0b]'
+                        (car.images?.length || 0) > 0 ? 'text-[rgb(59_130_246_/_0.5)]' : 'text-[#f59e0b]'
                       }`}>
                         <ImagePlus className="h-3.5 w-3.5" />
                         {car.images?.length || 0}
@@ -212,7 +212,7 @@ export function AdminCarsPage() {
                           {car.isAvailable !== false ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
                         </button>
                         <button
-                          className="rounded-lg p-1.5 text-[#94a3b8] hover:bg-[#4361ee]/10 hover:text-[#4361ee] transition"
+                          className="rounded-lg p-1.5 text-[#94a3b8] hover:bg-[rgb(59_130_246_/_0.5)]/10 hover:text-[rgb(59_130_246_/_0.5)] transition"
                           onClick={() => openEditForm(car)}
                           title="Edit"
                         >
@@ -338,7 +338,7 @@ export function AdminCarsPage() {
                     <p className="text-sm font-bold text-[#1e293b]">
                       Photos ({editingCar.images?.length || 0})
                     </p>
-                    <label className={`inline-flex items-center gap-1.5 cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold bg-[#4361ee]/10 text-[#4361ee] hover:bg-[#4361ee]/20 transition ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <label className={`inline-flex items-center gap-1.5 cursor-pointer rounded-lg px-3 py-1.5 text-xs font-bold bg-[rgb(59_130_246_/_0.5)]/10 text-[rgb(59_130_246_/_0.5)] hover:bg-[rgb(59_130_246_/_0.5)]/20 transition ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
                       <Upload className="h-3.5 w-3.5" />
                       {isUploading ? 'Uploading...' : 'Upload Photo'}
                       <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} disabled={isUploading} />
@@ -373,8 +373,8 @@ export function AdminCarsPage() {
 
               {/* Prompt to save first if adding */}
               {isAdding && (
-                <div className="rounded-lg bg-[#4361ee]/5 border border-[#4361ee]/20 p-3">
-                  <p className="text-xs text-[#4361ee] font-semibold">
+                <div className="rounded-lg bg-[rgb(59_130_246_/_0.5)]/5 border border-[rgb(59_130_246_/_0.5)]/20 p-3">
+                  <p className="text-xs text-[rgb(59_130_246_/_0.5)] font-semibold">
                     💡 Save the car first, then you can upload photos in edit mode.
                   </p>
                 </div>

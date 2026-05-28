@@ -37,20 +37,24 @@ function AdminBookingsPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button
-    variant="secondary"
-    onClick={() => updateBookingStatus(booking.id, "confirmed")}
-    leftIcon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-  >
-                  Confirm
-                </Button>
-                <Button
-    variant="danger"
-    onClick={() => updateBookingStatus(booking.id, "cancelled")}
-    leftIcon={<XCircle className="h-4 w-4" aria-hidden="true" />}
-  >
-                  Cancel
-                </Button>
+                {booking.status === "pending_payment" && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => updateBookingStatus(booking.id, "confirmed")}
+                    leftIcon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+                  >
+                    Approve
+                  </Button>
+                )}
+                {booking.status !== "cancelled" && booking.status !== "completed" && (
+                  <Button
+                    variant="danger"
+                    onClick={() => updateBookingStatus(booking.id, "cancelled")}
+                    leftIcon={<XCircle className="h-4 w-4" aria-hidden="true" />}
+                  >
+                    Cancel
+                  </Button>
+                )}
               </div>
             </div>
           </article>)}

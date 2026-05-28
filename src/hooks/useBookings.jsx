@@ -65,7 +65,7 @@ function BookingsProvider({ children }) {
     () => ({
       bookings,
       fetchBookings,
-      createBooking(draft, status = "confirmed") {
+      async createBooking(draft, status = "confirmed") {
         const booking = {
           id: crypto.randomUUID(),
           carId: draft.car.id,
@@ -80,14 +80,41 @@ function BookingsProvider({ children }) {
           customerPhone: draft.customerPhone,
           createdAt: (/* @__PURE__ */ new Date()).toISOString()
         };
-        // For now, if configured, we just add it locally since booking flow creates via Supabase functions normally or directly in DB.
-        // We'll leave the local update for immediate UI feedback.
+
+        if (isSupabaseConfigured && supabase) {
+          const { data, error } = await supabase.from("bookings").insert({
+            car_id: draft.car.id,
+            user_id: draft.userId,
+            start_date: draft.startDate,
+            end_date: draft.endDate,
+            customer_name: draft.customerName,
+            customer_email: draft.customerEmail,
+            customer_phone: draft.customerPhone || null,
+            total_price: draft.totalPrice,
+            status: status
+          }).select('id, created_at').single();
+          
+          if (error) {
+            console.error("Error inserting booking into Supabase:", error);
+            throw error;
+          }
+          if (data) {
+            booking.id = data.id;
+            booking.createdAt = data.created_at;
+          }
+        }
+
         setBookings((current) => [booking, ...current]);
         return booking;
       },
       async updateBookingStatus(bookingId, status) {
         if (isSupabaseConfigured && supabase) {
-          await supabase.from("bookings").update({ status }).eq("id", bookingId);
+          const { error } = await supabase.from("bookings").update({ status }).eq("id", bookingId);
+          if (error) {
+            console.error("Error updating booking status", error);
+            alert("Database Error: " + error.message);
+            return;
+          }
         }
         setBookings(
           (current) => current.map((booking) => booking.id === bookingId ? { ...booking, status } : booking)

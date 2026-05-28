@@ -156,8 +156,13 @@ function BookingPage() {
       }
     } catch {
     }
-    const booking = createBooking(draft, "confirmed");
-    navigate(`/success?booking=${booking.id}`);
+    try {
+      const booking = await createBooking(draft, "confirmed");
+      navigate(`/success?booking=${booking.id}`);
+    } catch (err) {
+      setError("Failed to create booking. Please try again.");
+      setIsSubmitting(false);
+    }
   }
 
   return <section className="bg-mist py-10">

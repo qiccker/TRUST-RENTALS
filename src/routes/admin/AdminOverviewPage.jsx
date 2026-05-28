@@ -40,28 +40,28 @@ function AdminOverviewPage() {
       value: cars.length,
       sub: `${availableCars} available`,
       icon: CarFront,
-      color: "bg-[#4361ee]",
+      color: "bg-[rgb(59_130_246_/_0.5)]",
     },
     {
       label: "Customers",
       value: customers.length,
       sub: "registered",
       icon: UsersRound,
-      color: "bg-[#4361ee]",
+      color: "bg-[rgb(59_130_246_/_0.5)]",
     },
     {
       label: "Staff",
       value: staff.length,
       sub: "active",
       icon: Contact,
-      color: "bg-[#4361ee]",
+      color: "bg-[rgb(59_130_246_/_0.5)]",
     },
     {
       label: "Total Sales",
       value: formatMoney(totalRevenue),
       sub: `${confirmedBookings.length} rental${confirmedBookings.length !== 1 ? "s" : ""}`,
       icon: IndianRupee,
-      color: "bg-[#4361ee]",
+      color: "bg-[rgb(59_130_246_/_0.5)]",
       large: true,
     },
   ];
@@ -74,7 +74,7 @@ function AdminOverviewPage() {
       {/* Header */}
       <div>
         <h1 className="text-[28px] font-extrabold text-[#1e293b]">Dashboard</h1>
-        <p className="mt-1 text-[14px] text-[#4361ee] font-medium">
+        <p className="mt-1 text-[14px] text-[rgb(59_130_246_/_0.5)] font-medium">
           Overview of your rental business
         </p>
       </div>
