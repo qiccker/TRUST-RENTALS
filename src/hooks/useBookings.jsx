@@ -61,6 +61,30 @@ function BookingsProvider({ children }) {
     }
   }, [bookings]);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !user) return;
+    
+    const channel = supabase.channel('bookings-all')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings' }, (payload) => {
+        // Update the specific booking in the local state optimistically
+        setBookings(current => current.map(b => 
+          b.id === payload.new.id ? { ...b, status: payload.new.status } : b
+        ));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bookings' }, (payload) => {
+        // For new inserts, it's safer to fetch the specific booking because we need the joined car name
+        // Realtime payloads don't include joined table data
+        if (user.role !== 'customer' || payload.new.user_id === user.id) {
+          fetchBookings(); // We could fetch just the single row, but for simplicity we reload
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, fetchBookings]);
+
   const value = useMemo(
     () => ({
       bookings,
@@ -107,18 +131,71 @@ function BookingsProvider({ children }) {
         setBookings((current) => [booking, ...current]);
         return booking;
       },
-      async updateBookingStatus(bookingId, status) {
+      async updateBookingStatus(bookingId, status, reason = null) {
         if (isSupabaseConfigured && supabase) {
-          const { error } = await supabase.from("bookings").update({ status }).eq("id", bookingId);
-          if (error) {
-            console.error("Error updating booking status", error);
-            alert("Database Error: " + error.message);
-            return;
+          // If the status is being updated by an admin/staff, use the RPC for logging.
+          // Customers cancel bookings directly using the old update statement, which we can still support here
+          // if user role is customer, otherwise we use the RPC.
+          if (user?.role === 'customer' && status === 'cancelled') {
+             const { error } = await supabase.from("bookings").update({ status }).eq("id", bookingId);
+             if (error) throw new Error(error.message);
+          } else {
+             const { error } = await supabase.rpc('admin_update_booking_status', {
+               p_booking_id: bookingId,
+               p_new_status: status,
+               p_reason: reason
+             });
+             if (error) throw new Error(error.message);
+          }
+          
+          // Simulated email notification
+          if (status === 'confirmed') {
+            console.log(`[SIMULATED EMAIL] To customer: Your booking ${bookingId} has been Approved and Confirmed!`);
+          } else if (status === 'rejected') {
+            console.log(`[SIMULATED EMAIL] To customer: Your booking ${bookingId} was Rejected. Reason: ${reason || 'None provided'}`);
           }
         }
         setBookings(
           (current) => current.map((booking) => booking.id === bookingId ? { ...booking, status } : booking)
         );
+      },
+      async fetchPaginatedBookings(page = 1, pageSize = 10) {
+        if (!isSupabaseConfigured || !supabase) return { data: [], count: 0 };
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+        
+        let query = supabase
+          .from("bookings")
+          .select(`*, cars(name)`, { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(from, to);
+          
+        if (user?.role === 'customer') {
+          query = query.eq('user_id', user.id);
+        }
+        
+        const { data, count, error } = await query;
+        if (error) {
+          console.error("Error fetching paginated bookings:", error);
+          return { data: [], count: 0 };
+        }
+        
+        const formatted = data.map(b => ({
+          id: b.id,
+          carId: b.car_id,
+          userId: b.user_id,
+          carName: b.cars?.name || 'Unknown Car',
+          startDate: b.start_date,
+          endDate: b.end_date,
+          totalPrice: Number(b.total_price),
+          status: b.status,
+          customerName: b.customer_name,
+          customerEmail: b.customer_email,
+          customerPhone: b.customer_phone,
+          createdAt: b.created_at
+        }));
+        
+        return { data: formatted, count: count || 0 };
       }
     }),
     [bookings, fetchBookings]

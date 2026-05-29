@@ -1,24 +1,50 @@
 import { CarFront, Contact, IndianRupee, UsersRound } from "lucide-react";
-import { useEffect } from "react";
-import { useBookings } from "../../hooks/useBookings";
-import { useCars } from "../../hooks/useCars";
-import { useProfiles } from "../../hooks/useProfiles";
+import { useEffect, useState } from "react";
 import { formatMoney } from "../../lib/money";
+import { isSupabaseConfigured, supabase } from "../../lib/supabase/browser";
 
 function AdminOverviewPage() {
-  const { bookings, fetchBookings } = useBookings();
-  const { cars, fetchCars } = useCars();
-  const { customers, staff, fetchProfiles } = useProfiles();
+  const [stats, setStats] = useState({
+    total_revenue: 0,
+    total_cars: 0,
+    available_cars: 0,
+    total_customers: 0,
+    total_staff: 0
+  });
+  const [recentRentals, setRecentRentals] = useState([]);
 
   useEffect(() => {
-    fetchBookings();
-    fetchCars(true);
-    fetchProfiles();
-  }, [fetchBookings, fetchCars, fetchProfiles]);
+    async function loadDashboardData() {
+      if (!isSupabaseConfigured || !supabase) return;
+      
+      try {
+        const { data: statsData } = await supabase.rpc('get_admin_dashboard_stats');
+        if (statsData) setStats(statsData);
 
-  const confirmedBookings = bookings.filter((b) => b.status === "confirmed");
-  const totalRevenue = confirmedBookings.reduce((sum, b) => sum + b.totalPrice, 0);
-  const availableCars = cars.filter((c) => c.isAvailable !== false).length;
+        const { data: recentData } = await supabase
+          .from('bookings')
+          .select(`*, cars(name)`)
+          .in('status', ['confirmed', 'pending_payment'])
+          .order('created_at', { ascending: false })
+          .limit(5);
+          
+        if (recentData) {
+          setRecentRentals(recentData.map(b => ({
+            id: b.id,
+            customerName: b.customer_name,
+            carName: b.cars?.name || 'Unknown Car',
+            startDate: b.start_date,
+            endDate: b.end_date,
+            totalPrice: Number(b.total_price)
+          })));
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard stats", err);
+      }
+    }
+    
+    loadDashboardData();
+  }, []);
 
   // Calculate rental duration in days
   function getDays(start, end) {
@@ -37,37 +63,34 @@ function AdminOverviewPage() {
   const metrics = [
     {
       label: "Total Cars",
-      value: cars.length,
-      sub: `${availableCars} available`,
+      value: stats.total_cars,
+      sub: `${stats.available_cars} available`,
       icon: CarFront,
       color: "bg-[rgb(59_130_246_/_0.5)]",
     },
     {
       label: "Customers",
-      value: customers.length,
+      value: stats.total_customers,
       sub: "registered",
       icon: UsersRound,
       color: "bg-[rgb(59_130_246_/_0.5)]",
     },
     {
       label: "Staff",
-      value: staff.length,
+      value: stats.total_staff,
       sub: "active",
       icon: Contact,
       color: "bg-[rgb(59_130_246_/_0.5)]",
     },
     {
       label: "Total Sales",
-      value: formatMoney(totalRevenue),
-      sub: `${confirmedBookings.length} rental${confirmedBookings.length !== 1 ? "s" : ""}`,
+      value: formatMoney(stats.total_revenue || 0),
+      sub: `Lifetime confirmed revenue`,
       icon: IndianRupee,
       color: "bg-[rgb(59_130_246_/_0.5)]",
       large: true,
     },
   ];
-
-  // Recent rentals — take the latest 5 confirmed bookings
-  const recentRentals = confirmedBookings.slice(0, 5);
 
   return (
     <div className="grid gap-8">
@@ -130,7 +153,7 @@ function AdminOverviewPage() {
             })
           ) : (
             <div className="py-8 text-center text-[14px] text-[#94a3b8]">
-              No confirmed rentals yet
+              No rentals yet
             </div>
           )}
         </div>

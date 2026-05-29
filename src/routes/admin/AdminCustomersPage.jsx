@@ -1,17 +1,31 @@
-import { CheckCircle, Eye, FileWarning, Search, ShieldPlus, Trash2, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, CheckCircle, Eye, FileWarning, Search, ShieldPlus, Trash2, XCircle } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "../../components/ui/Button";
 import { useProfiles } from "../../hooks/useProfiles";
 
 export function AdminCustomersPage() {
-  const { customers, fetchProfiles, updateProfileRole, updateDocumentStatus, deleteProfile, getSignedDocumentUrl, isLoading } = useProfiles();
+  const { fetchPaginatedProfiles, updateProfileRole, updateDocumentStatus, deleteProfile, getSignedDocumentUrl } = useProfiles();
+  const [page, setPage] = useState(1);
+  const [paginatedCustomers, setPaginatedCustomers] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const pageSize = 10;
+  
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [govIdUrl, setGovIdUrl] = useState("");
   const [licenseUrl, setLicenseUrl] = useState("");
 
+  const loadPage = useCallback(async (p) => {
+    setIsLoading(true);
+    const { data, count } = await fetchPaginatedProfiles('customer', p, pageSize);
+    setPaginatedCustomers(data);
+    setTotalCount(count);
+    setIsLoading(false);
+  }, [fetchPaginatedProfiles]);
+
   useEffect(() => {
-    fetchProfiles();
-  }, [fetchProfiles]);
+    loadPage(page);
+  }, [page, loadPage]);
 
   // Load document URLs when a customer is selected
   useEffect(() => {
@@ -30,21 +44,33 @@ export function AdminCustomersPage() {
   const handlePromote = async (id) => {
     if (confirm("Promote this customer to staff? They will gain access to the admin dashboard.")) {
       const ok = await updateProfileRole(id, 'staff');
-      if (ok) setSelectedCustomer(null);
+      if (ok) {
+        setSelectedCustomer(null);
+        setPaginatedCustomers(current => current.filter(c => c.id !== id));
+        setTotalCount(c => c - 1);
+      }
     }
   };
 
   const handleVerify = async (status) => {
     if (!selectedCustomer) return;
     const ok = await updateDocumentStatus(selectedCustomer.id, status);
-    if (ok) setSelectedCustomer({ ...selectedCustomer, document_status: status });
+    if (ok) {
+      const updated = { ...selectedCustomer, document_status: status };
+      setSelectedCustomer(updated);
+      setPaginatedCustomers(current => current.map(c => c.id === selectedCustomer.id ? updated : c));
+    }
   };
 
   const handleRemove = async (customer) => {
     if (!confirm(`Remove customer "${customer.full_name || 'Unknown'}"? This cannot be undone.`)) return;
     await deleteProfile(customer.id);
     if (selectedCustomer?.id === customer.id) setSelectedCustomer(null);
+    setPaginatedCustomers(current => current.filter(c => c.id !== customer.id));
+    setTotalCount(c => c - 1);
   };
+
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
   const statusBadge = {
     unsubmitted: { bg: "bg-graphite/10 text-graphite", icon: <FileWarning className="h-3 w-3" /> },
@@ -58,7 +84,7 @@ export function AdminCustomersPage() {
       <div>
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-teal">User management</p>
         <h1 className="mt-2 text-4xl font-black text-ink">Customers</h1>
-        <p className="mt-1 text-sm text-graphite">{customers.length} registered customer{customers.length !== 1 ? 's' : ''}</p>
+        <p className="mt-1 text-sm text-graphite">{totalCount} registered customer{totalCount !== 1 ? 's' : ''}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
@@ -75,7 +101,7 @@ export function AdminCustomersPage() {
                 </tr>
               </thead>
               <tbody className={isLoading ? "opacity-50" : ""}>
-                {customers.map((customer) => {
+                {paginatedCustomers.map((customer) => {
                   const s = statusBadge[customer.document_status || 'unsubmitted'];
                   return (
                     <tr key={customer.id} className={`border-b border-line/70 transition ${selectedCustomer?.id === customer.id ? 'bg-teal/5' : 'hover:bg-mist/30'}`}>
@@ -110,7 +136,7 @@ export function AdminCustomersPage() {
                     </tr>
                   );
                 })}
-                {customers.length === 0 && !isLoading && (
+                {paginatedCustomers.length === 0 && !isLoading && (
                   <tr>
                     <td colSpan="4" className="px-5 py-12 text-center text-graphite">
                       No customers found.
@@ -120,6 +146,30 @@ export function AdminCustomersPage() {
               </tbody>
             </table>
           </div>
+          {totalCount > pageSize && (
+            <div className="flex items-center justify-between border-t border-line p-4">
+              <p className="text-sm text-graphite">
+                Showing <span className="font-bold text-ink">{(page - 1) * pageSize + 1}</span> to <span className="font-bold text-ink">{Math.min(page * pageSize, totalCount)}</span> of <span className="font-bold text-ink">{totalCount}</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setPage(p => Math.max(1, p - 1))} 
+                  disabled={page === 1 || isLoading}
+                  leftIcon={<ChevronLeft className="h-4 w-4" />}
+                >
+                  Prev
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))} 
+                  disabled={page === totalPages || isLoading}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-2 -mr-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Customer Detail / Verification Panel */}

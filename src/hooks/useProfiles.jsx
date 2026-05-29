@@ -90,6 +90,26 @@ export function useProfiles() {
     updateProfileRole,
     updateDocumentStatus,
     deleteProfile,
-    getSignedDocumentUrl
+    getSignedDocumentUrl,
+    async fetchPaginatedProfiles(roleFilter, page = 1, pageSize = 10) {
+      if (!isSupabaseConfigured || !supabase || !user) return { data: [], count: 0 };
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      
+      let query = supabase.from("profiles").select("*", { count: 'exact' }).order("created_at", { ascending: false }).range(from, to);
+      
+      if (roleFilter === 'customer') {
+        query = query.eq('role', 'customer');
+      } else if (roleFilter === 'staff') {
+        query = query.in('role', ['staff', 'admin']);
+      }
+
+      const { data, count, error } = await query;
+      if (error) {
+        console.error("Error fetching paginated profiles:", error);
+        return { data: [], count: 0 };
+      }
+      return { data: data || [], count: count || 0 };
+    }
   };
 }

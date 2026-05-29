@@ -87,8 +87,27 @@ export function useCars() {
       return null;
     }
     
-    // Re-fetch to get images joined
-    await fetchCars(true);
+    // Fetch just the newly inserted car to get joined images (even if empty)
+    const { data: newCarData } = await supabase.from("cars").select(`
+      *,
+      car_images (id, url, storage_path, is_primary, sort_order)
+    `).eq('id', data.id).single();
+    
+    if (newCarData) {
+      const formattedNewCar = {
+        ...newCarData,
+        pricePerDay: Number(newCarData.price_per_day),
+        fuelType: newCarData.fuel_type,
+        luggageCapacity: newCarData.luggage_capacity,
+        isAvailable: newCarData.is_available,
+        images: newCarData.car_images 
+          ? newCarData.car_images.sort((a, b) => a.sort_order - b.sort_order).map(img => img.url)
+          : [],
+        imagesRaw: newCarData.car_images || []
+      };
+      setCars(current => [formattedNewCar, ...current]);
+      return formattedNewCar;
+    }
     return data;
   }, [fetchCars]);
 
@@ -190,6 +209,40 @@ export function useCars() {
     updateCar,
     deleteCar,
     uploadCarImage,
-    deleteCarImage
+    deleteCarImage,
+    async fetchPaginatedCars(page = 1, pageSize = 10, includeUnavailable = false) {
+      if (!isSupabaseConfigured || !supabase) return { data: [], count: 0 };
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      
+      let query = supabase.from("cars").select(`
+        *,
+        car_images (id, url, storage_path, is_primary, sort_order)
+      `, { count: 'exact' }).order('created_at', { ascending: false }).range(from, to);
+
+      if (!includeUnavailable) {
+        query = query.eq('is_available', true);
+      }
+
+      const { data, count, error } = await query;
+      if (error) {
+        console.error("Error fetching paginated cars:", error);
+        return { data: [], count: 0 };
+      }
+      
+      const formattedCars = data.map(car => ({
+        ...car,
+        pricePerDay: Number(car.price_per_day),
+        fuelType: car.fuel_type,
+        luggageCapacity: car.luggage_capacity,
+        isAvailable: car.is_available,
+        images: car.car_images 
+          ? car.car_images.sort((a, b) => a.sort_order - b.sort_order).map(img => img.url)
+          : [],
+        imagesRaw: car.car_images || []
+      }));
+      
+      return { data: formattedCars, count: count || 0 };
+    }
   };
 }

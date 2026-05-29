@@ -34,12 +34,18 @@ function AuthProvider({ children }) {
         return;
       }
       const { data: profile } = await supabase.from("profiles").select("full_name, phone, role, document_status, gov_id_url, driving_license_url").eq("id", data.user.id).single();
+
+      // Double-check role server-side via security-definer RPC to prevent
+      // client-side profile row tampering from escalating privileges.
+      const { data: verifiedRole } = await supabase.rpc("current_user_role");
+      const safeRole = verifiedRole ?? profile?.role ?? "customer";
+
       setUser({
         id: data.user.id,
         email: data.user.email ?? "",
         fullName: profile?.full_name ?? data.user.email ?? "Customer",
         phone: profile?.phone ?? void 0,
-        role: profile?.role ?? "customer",
+        role: safeRole,
         documentStatus: profile?.document_status ?? "unsubmitted",
         govIdUrl: profile?.gov_id_url ?? null,
         drivingLicenseUrl: profile?.driving_license_url ?? null
@@ -80,11 +86,12 @@ function AuthProvider({ children }) {
         if (password.length < 6) {
           throw new Error("Password must be at least 6 characters.");
         }
+        // Demo mode: always assign "customer" — never infer role from email.
         setUser({
           id: "demo-customer",
           email,
           fullName: email.split("@")[0] || "Customer",
-          role: email.toLowerCase().includes("admin") ? "admin" : "customer"
+          role: "customer"
         });
       },
       async signUp(fullName, email, password) {
@@ -110,6 +117,12 @@ function AuthProvider({ children }) {
         setUser(null);
       },
       useDemoAccount(role) {
+        // Block demo accounts entirely when Supabase is active — prevents
+        // privilege escalation by calling this function with role="admin".
+        if (isSupabaseConfigured) {
+          console.warn("useDemoAccount is disabled when Supabase is configured.");
+          return;
+        }
         setUser(demoUser(role));
       }
     }),

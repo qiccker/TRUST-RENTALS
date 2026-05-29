@@ -1,5 +1,5 @@
-import { CarFront, Edit2, ImagePlus, Plus, ToggleLeft, ToggleRight, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, CarFront, Edit2, ImagePlus, Plus, ToggleLeft, ToggleRight, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "../../components/ui/Button";
 import { Input, Select, Textarea } from "../../components/ui/Field";
 import { vehicleTypeLabels } from "../../data/fleet";
@@ -19,7 +19,12 @@ const emptyCarForm = {
 };
 
 export function AdminCarsPage() {
-  const { cars, fetchCars, addCar, updateCar, deleteCar, uploadCarImage, deleteCarImage, isLoading } = useCars();
+  const { fetchPaginatedCars, addCar, updateCar, deleteCar, uploadCarImage, deleteCarImage } = useCars();
+  const [page, setPage] = useState(1);
+  const [paginatedCars, setPaginatedCars] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const pageSize = 10;
   const [editingCar, setEditingCar] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState(emptyCarForm);
@@ -28,9 +33,18 @@ export function AdminCarsPage() {
   const [featuresText, setFeaturesText] = useState("");
   const fileInputRef = useRef(null);
 
+  const loadPage = useCallback(async (p) => {
+    setIsLoading(true);
+    // Include unavailable cars in admin view
+    const { data, count } = await fetchPaginatedCars(p, pageSize, true);
+    setPaginatedCars(data);
+    setTotalCount(count);
+    setIsLoading(false);
+  }, [fetchPaginatedCars]);
+
   useEffect(() => {
-    fetchCars(true);
-  }, [fetchCars]);
+    loadPage(page);
+  }, [page, loadPage]);
 
   // When editing, populate form
   useEffect(() => {
@@ -89,19 +103,19 @@ export function AdminCarsPage() {
       const newCar = await addCar(formData);
       setIsSaving(false);
       if (newCar) {
-        // After adding, switch to edit mode so admin can upload photos
-        await fetchCars(true);
-        const refreshedCar = cars.find(c => c.id === newCar.id);
+        // Optimistically update
+        setPaginatedCars(current => [newCar, ...current].slice(0, pageSize));
+        setTotalCount(c => c + 1);
         setIsAdding(false);
-        setEditingCar(refreshedCar || { ...newCar, images: [], imagesRaw: [], pricePerDay: formData.pricePerDay, fuelType: formData.fuelType, luggageCapacity: formData.luggageCapacity, isAvailable: true });
+        setEditingCar({ ...newCar, images: [], imagesRaw: [], pricePerDay: formData.pricePerDay, fuelType: formData.fuelType, luggageCapacity: formData.luggageCapacity, isAvailable: true });
       } else {
         closeForm();
       }
     } else if (editingCar) {
       await updateCar(editingCar.id, formData);
       setIsSaving(false);
+      setPaginatedCars(current => current.map(c => c.id === editingCar.id ? { ...c, ...formData } : c));
       closeForm();
-      fetchCars(true);
     }
   };
 
@@ -109,6 +123,8 @@ export function AdminCarsPage() {
     if (!confirm(`Are you sure you want to permanently delete "${car.name}"? This action cannot be undone.`)) return;
     await deleteCar(car.id);
     if (editingCar?.id === car.id) closeForm();
+    setPaginatedCars(current => current.filter(c => c.id !== car.id));
+    setTotalCount(c => c - 1);
   };
 
   const handleImageUpload = async (e) => {
@@ -117,7 +133,10 @@ export function AdminCarsPage() {
     setIsUploading(true);
     const newUrl = await uploadCarImage(editingCar.id, file);
     if (newUrl) {
-      fetchCars(true);
+      // Optimistically update
+      setPaginatedCars(current => current.map(c => 
+        c.id === editingCar.id ? { ...c, images: [...(c.images || []), newUrl] } : c
+      ));
       setEditingCar(prev => ({
         ...prev,
         images: [...(prev.images || []), newUrl]
@@ -133,6 +152,13 @@ export function AdminCarsPage() {
     if (rawImg) {
       const ok = await deleteCarImage(rawImg.id, rawImg.storage_path);
       if (ok) {
+        setPaginatedCars(current => current.map(c => 
+          c.id === editingCar.id ? {
+            ...c,
+            images: c.images.filter(u => u !== img),
+            imagesRaw: c.imagesRaw.filter(r => r.id !== rawImg.id)
+          } : c
+        ));
         setEditingCar(prev => ({
           ...prev,
           images: prev.images.filter(u => u !== img),
@@ -143,6 +169,13 @@ export function AdminCarsPage() {
   };
 
   const showForm = isAdding || editingCar;
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+
+  const toggleAvailability = async (car) => {
+    const newStatus = car.isAvailable === false ? true : false;
+    await updateCar(car.id, { isAvailable: newStatus });
+    setPaginatedCars(current => current.map(c => c.id === car.id ? { ...c, isAvailable: newStatus } : c));
+  };
 
   return (
     <div className="grid gap-6">
@@ -170,8 +203,8 @@ export function AdminCarsPage() {
                   <th className="px-5 py-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className={isLoading && !cars.length ? "opacity-50" : ""}>
-                {cars.map((car) => (
+              <tbody className={isLoading && !paginatedCars.length ? "opacity-50" : ""}>
+                {paginatedCars.map((car) => (
                   <tr key={car.id} className={`border-b border-[#f1f5f9] transition ${editingCar?.id === car.id ? 'bg-[rgb(59_130_246_/_0.5)]/5' : 'hover:bg-[#f8fafc]'}`}>
                     <td className="px-5 py-4">
                       <span className="inline-flex items-center gap-3">
@@ -206,7 +239,7 @@ export function AdminCarsPage() {
                       <div className="flex justify-end gap-1">
                         <button
                           className="rounded-lg p-1.5 text-[#94a3b8] hover:bg-[#f1f5f9] hover:text-[#1e293b] transition"
-                          onClick={() => updateCar(car.id, { isAvailable: car.isAvailable === false })}
+                          onClick={() => toggleAvailability(car)}
                           title={car.isAvailable !== false ? "Mark unavailable" : "Mark available"}
                         >
                           {car.isAvailable !== false ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
@@ -229,7 +262,7 @@ export function AdminCarsPage() {
                     </td>
                   </tr>
                 ))}
-                {cars.length === 0 && !isLoading && (
+                {paginatedCars.length === 0 && !isLoading && (
                   <tr>
                     <td colSpan="7" className="px-5 py-12 text-center text-[#94a3b8]">
                       <CarFront className="mx-auto h-8 w-8 mb-2 text-[#cbd5e1]" />
@@ -240,6 +273,30 @@ export function AdminCarsPage() {
               </tbody>
             </table>
           </div>
+          {totalCount > pageSize && (
+            <div className="flex items-center justify-between border-t border-line p-4">
+              <p className="text-sm text-graphite">
+                Showing <span className="font-bold text-ink">{(page - 1) * pageSize + 1}</span> to <span className="font-bold text-ink">{Math.min(page * pageSize, totalCount)}</span> of <span className="font-bold text-ink">{totalCount}</span> cars
+              </p>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setPage(p => Math.max(1, p - 1))} 
+                  disabled={page === 1 || isLoading}
+                  leftIcon={<ChevronLeft className="h-4 w-4" />}
+                >
+                  Prev
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))} 
+                  disabled={page === totalPages || isLoading}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-2 -mr-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Add / Edit Form Panel */}

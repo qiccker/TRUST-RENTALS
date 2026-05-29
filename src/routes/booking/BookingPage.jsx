@@ -108,8 +108,8 @@ function BookingPage() {
       </section>;
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  async function handleSubmit(event, bookingStatus = "pending_payment") {
+    if (event) event.preventDefault();
     setError("");
     if (!validation.ok) {
       setError(validation.message);
@@ -131,48 +131,22 @@ function BookingPage() {
       totalPrice: validation.totalPrice
     };
     try {
-      const accessToken = supabase ? (await supabase.auth.getSession()).data.session?.access_token : void 0;
-      const response = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-        },
-        body: JSON.stringify({
-          carId: car.id,
-          startDate,
-          endDate,
-          customerName: draft.customerName,
-          customerEmail: draft.customerEmail,
-          customerPhone: draft.customerPhone
-        })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        }
-      }
-    } catch {
-    }
-    try {
-      const booking = await createBooking(draft, "confirmed");
+      const booking = await createBooking(draft, bookingStatus);
       navigate(`/success?booking=${booking.id}`);
     } catch (err) {
-      setError("Failed to create booking. Please try again.");
+      setError(err.message || "Failed to create booking. Please try again.");
       setIsSubmitting(false);
     }
   }
 
   return <section className="bg-mist py-10">
       <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8">
-        <form className="grid gap-6 rounded-md border border-line bg-white p-6 shadow-sm" onSubmit={handleSubmit}>
+        <form className="grid gap-6 rounded-md border border-line bg-white p-6 shadow-sm" onSubmit={(e) => handleSubmit(e, "pending_payment")}>
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.16em] text-teal">Online booking</p>
               <h1 className="mt-2 text-4xl font-black text-ink">Reserve {car.name}</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-graphite">
-              Choose dates, confirm driver contact details, and continue to protected checkout.
+              Choose dates, confirm driver contact details, and secure your reservation. Payment is collected at the showroom.
             </p>
           </div>
 
@@ -215,16 +189,28 @@ function BookingPage() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
             <p className="text-sm text-graphite">
-              Checkout creates a 30-minute hold before payment confirmation.
+              Your booking will be pending admin approval. Please pay at the showroom.
             </p>
-            <Button
-    type="submit"
-    isLoading={isSubmitting}
-    disabled={!validation.ok || user?.documentStatus !== "verified"}
-    leftIcon={<CreditCard className="h-4 w-4" aria-hidden="true" />}
-  >
-              Checkout
-            </Button>
+            <div className="flex gap-2">
+              {(user?.role === 'admin' || user?.role === 'staff') && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  isLoading={isSubmitting}
+                  disabled={!validation.ok || user?.documentStatus !== "verified"}
+                  onClick={() => handleSubmit(null, "confirmed")}
+                >
+                  Approve (Paid)
+                </Button>
+              )}
+              <Button
+                type="submit"
+                isLoading={isSubmitting}
+                disabled={!validation.ok || user?.documentStatus !== "verified"}
+              >
+                {user?.role === 'admin' || user?.role === 'staff' ? "Reserve (Pending)" : "Confirm Booking"}
+              </Button>
+            </div>
           </div>
         </form>
 

@@ -581,3 +581,174 @@ grant execute on function public.get_car_booked_ranges(uuid) to anon, authentica
 
 revoke all on function public.cancel_expired_pending_bookings() from public;
 grant execute on function public.cancel_expired_pending_bookings() to service_role;
+
+-- Performance & Reliability Additions
+
+-- 1. pg_cron for expired bookings
+create extension if not exists pg_cron with schema extensions;
+
+do $cronsetup$
+begin
+  if not exists (select 1 from cron.job where jobname = 'cancel_expired_bookings') then
+    perform cron.schedule(
+      'cancel_expired_bookings',
+      '* * * * *',
+      $cron$ select public.cancel_expired_pending_bookings(); $cron$
+    );
+  end if;
+end $cronsetup$;
+
+-- 2. RPC for admin dashboard stats
+create or replace function public.get_admin_dashboard_stats()
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  total_revenue numeric;
+  total_cars int;
+  available_cars int;
+  total_customers int;
+  total_staff int;
+  confirmed_bookings int;
+  pending_bookings int;
+  cancelled_bookings int;
+  pending_revenue numeric;
+  cancelled_revenue numeric;
+begin
+  if not public.is_admin() then
+    raise exception 'Unauthorized';
+  end if;
+
+  select count(*) into total_cars from public.cars;
+  select count(*) into available_cars from public.cars where is_available = true;
+  
+  select count(*) into total_customers from public.profiles where role = 'customer';
+  select count(*) into total_staff from public.profiles where role in ('staff', 'admin');
+
+  select 
+    count(*) filter (where status = 'confirmed'),
+    coalesce(sum(total_price) filter (where status = 'confirmed'), 0),
+    count(*) filter (where status = 'pending_payment'),
+    coalesce(sum(total_price) filter (where status = 'pending_payment'), 0),
+    count(*) filter (where status = 'cancelled'),
+    coalesce(sum(total_price) filter (where status = 'cancelled'), 0)
+  into 
+    confirmed_bookings, total_revenue,
+    pending_bookings, pending_revenue,
+    cancelled_bookings, cancelled_revenue
+  from public.bookings;
+
+  return json_build_object(
+    'total_revenue', total_revenue,
+    'total_cars', total_cars,
+    'available_cars', available_cars,
+    'total_customers', total_customers,
+    'total_staff', total_staff,
+    'confirmed_bookings', confirmed_bookings,
+    'pending_bookings', pending_bookings,
+    'pending_revenue', pending_revenue,
+    'cancelled_bookings', cancelled_bookings,
+    'cancelled_revenue', cancelled_revenue
+  );
+end;
+$$;
+
+grant execute on function public.get_admin_dashboard_stats() to authenticated;
+
+-- Add rejected status to enum
+alter type public.booking_status add value if not exists 'rejected';
+
+-- Create booking activity logs table
+create table if not exists public.booking_activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid references public.bookings(id) on delete cascade not null,
+  user_id uuid references public.profiles(id) on delete set null,
+  action text not null,
+  reason text,
+  created_at timestamptz not null default now()
+);
+
+-- Enable RLS on booking_activity_logs
+alter table public.booking_activity_logs enable row level security;
+
+drop policy if exists "booking_activity_logs_admin_staff_select" on public.booking_activity_logs;
+create policy "booking_activity_logs_admin_staff_select"
+on public.booking_activity_logs
+for select
+to authenticated
+using (
+  (select role from public.profiles where id = auth.uid()) in ('admin', 'staff')
+);
+
+drop policy if exists "booking_activity_logs_customer_select" on public.booking_activity_logs;
+create policy "booking_activity_logs_customer_select"
+on public.booking_activity_logs
+for select
+to authenticated
+using (
+  exists (
+    select 1 from public.bookings 
+    where bookings.id = booking_activity_logs.booking_id 
+    and bookings.user_id = auth.uid()
+  )
+);
+
+-- RPC for updating booking status with logging
+create or replace function public.admin_update_booking_status(
+  p_booking_id uuid,
+  p_new_status public.booking_status,
+  p_reason text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_role public.app_role;
+  current_status public.booking_status;
+  action_name text;
+begin
+  -- Get caller role
+  select role into caller_role from public.profiles where id = auth.uid();
+  
+  if caller_role not in ('admin', 'staff') then
+    raise exception 'Unauthorized';
+  end if;
+
+  -- Get current status
+  select status into current_status from public.bookings where id = p_booking_id;
+  if not found then
+    raise exception 'Booking not found';
+  end if;
+
+  -- Determine action name for log
+  if current_status in ('confirmed', 'rejected') then
+    action_name := 'Overridden to ' || initcap(p_new_status::text);
+  else
+    if p_new_status = 'confirmed' then
+      action_name := 'Approved';
+    elsif p_new_status = 'rejected' then
+      action_name := 'Rejected';
+    elsif p_new_status = 'cancelled' then
+      action_name := 'Cancelled';
+    else
+      action_name := 'Status changed to ' || p_new_status::text;
+    end if;
+  end if;
+
+  -- Update booking
+  update public.bookings 
+  set status = p_new_status
+  where id = p_booking_id;
+
+  -- Insert log
+  insert into public.booking_activity_logs (booking_id, user_id, action, reason)
+  values (p_booking_id, auth.uid(), action_name, p_reason);
+
+end;
+$$;
+
+grant execute on function public.admin_update_booking_status(uuid, public.booking_status, text) to authenticated;

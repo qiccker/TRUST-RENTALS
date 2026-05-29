@@ -28,6 +28,17 @@ function CarDetailPage() {
         
         if (error) throw error;
         
+        const { data: bookingsData } = await supabase
+          .from("bookings")
+          .select("start_date, end_date")
+          .eq("car_id", data.id)
+          .not("status", "in", '("cancelled","payment_failed")');
+
+        const bookedRanges = (bookingsData || []).map(b => ({
+          startDate: b.start_date,
+          endDate: b.end_date
+        }));
+        
         setCar({
           ...data,
           pricePerDay: Number(data.price_per_day),
@@ -37,7 +48,7 @@ function CarDetailPage() {
           images: data.car_images
             ? data.car_images.sort((a, b) => a.sort_order - b.sort_order).map((img) => img.url)
             : [],
-          bookedRanges: []
+          bookedRanges
         });
       } catch (err) {
         console.error("Error loading car:", err);

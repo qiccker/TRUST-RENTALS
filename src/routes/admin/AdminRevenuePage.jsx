@@ -1,24 +1,35 @@
 import { DollarSign } from "lucide-react";
-import { useEffect } from "react";
-import { useBookings } from "../../hooks/useBookings";
+import { useEffect, useState } from "react";
 import { formatMoney } from "../../lib/money";
+import { isSupabaseConfigured, supabase } from "../../lib/supabase/browser";
 
 function AdminRevenuePage() {
-  const { bookings, fetchBookings } = useBookings();
-  
-  useEffect(() => {
-    fetchBookings();
-  }, [fetchBookings]);
+  const [stats, setStats] = useState({
+    total_revenue: 0,
+    pending_revenue: 0,
+    cancelled_revenue: 0,
+    confirmed_bookings: 0,
+    pending_bookings: 0,
+    cancelled_bookings: 0
+  });
 
-  const confirmed = bookings.filter((booking) => booking.status === "confirmed");
-  const pending = bookings.filter((booking) => booking.status === "pending_payment");
-  const cancelled = bookings.filter((booking) => booking.status === "cancelled");
-  const revenue = confirmed.reduce((sum, booking) => sum + booking.totalPrice, 0);
-  const pendingRevenue = pending.reduce((sum, booking) => sum + booking.totalPrice, 0);
+  useEffect(() => {
+    async function loadStats() {
+      if (!isSupabaseConfigured || !supabase) return;
+      try {
+        const { data } = await supabase.rpc('get_admin_dashboard_stats');
+        if (data) setStats(data);
+      } catch (err) {
+        console.error("Error loading revenue stats", err);
+      }
+    }
+    loadStats();
+  }, []);
+
   const rows = [
-    { label: "Confirmed revenue", value: revenue, count: confirmed.length, tone: "text-basil" },
-    { label: "Pending checkout", value: pendingRevenue, count: pending.length, tone: "text-saffron" },
-    { label: "Cancelled bookings", value: 0, count: cancelled.length, tone: "text-ember" }
+    { label: "Confirmed revenue", value: stats.total_revenue, count: stats.confirmed_bookings, tone: "text-basil" },
+    { label: "Pending checkout", value: stats.pending_revenue, count: stats.pending_bookings, tone: "text-saffron" },
+    { label: "Lost to cancellations", value: stats.cancelled_revenue, count: stats.cancelled_bookings, tone: "text-ember" }
   ];
   return <div className="grid gap-6">
       <div>
@@ -29,7 +40,7 @@ function AdminRevenuePage() {
       <section className="rounded-md border border-line bg-white p-6 shadow-sm">
         <DollarSign className="h-8 w-8 text-teal" aria-hidden="true" />
         <p className="mt-4 text-sm font-bold uppercase tracking-[0.16em] text-graphite">Total confirmed</p>
-        <p className="mt-2 text-5xl font-black text-ink">{formatMoney(revenue)}</p>
+        <p className="mt-2 text-5xl font-black text-ink">{formatMoney(stats.total_revenue)}</p>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
