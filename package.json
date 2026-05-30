@@ -9,7 +9,6 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "@stripe/stripe-js": "^4.10.0",
     "@supabase/supabase-js": "^2.47.10",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.468.0",
@@ -17,7 +16,6 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "resend": "^4.0.1",
-    "stripe": "^17.4.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

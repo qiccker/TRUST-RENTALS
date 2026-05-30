@@ -9,7 +9,6 @@ import { AdminBookingsPage } from "../routes/admin/AdminBookingsPage";
 import { AdminCarsPage } from "../routes/admin/AdminCarsPage";
 import { AdminLayout } from "../routes/admin/AdminLayout";
 import { AdminOverviewPage } from "../routes/admin/AdminOverviewPage";
-import { AdminRevenuePage } from "../routes/admin/AdminRevenuePage";
 import { AdminRoute } from "../routes/admin/AdminRoute";
 import { AdminStaffPage } from "../routes/admin/AdminStaffPage";
 import { AdminCustomersPage } from "../routes/admin/AdminCustomersPage";
@@ -19,6 +18,7 @@ import { ResetPasswordPage } from "../routes/auth/ResetPasswordPage";
 import { BookingCancelPage } from "../routes/booking/BookingCancelPage";
 import { BookingPage } from "../routes/booking/BookingPage";
 import { BookingSuccessPage } from "../routes/booking/BookingSuccessPage";
+import { ReceiptPage } from "../routes/booking/ReceiptPage";
 import { CarDetailPage } from "../routes/public/CarDetailPage";
 import { FleetPage } from "../routes/public/FleetPage";
 import { HomePage } from "../routes/public/HomePage";
@@ -35,6 +35,7 @@ function App() {
               <Route path="book/:slug" element={<BookingPage />} />
               <Route path="success" element={<BookingSuccessPage />} />
               <Route path="checkout-cancelled" element={<BookingCancelPage />} />
+              <Route path="receipt/:bookingId" element={<ReceiptPage />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
               <Route path="reset-password" element={<ResetPasswordPage />} />
@@ -52,7 +53,6 @@ function App() {
                 <Route index element={<AdminOverviewPage />} />
                 <Route path="cars" element={<AdminCarsPage />} />
                 <Route path="bookings" element={<AdminBookingsPage />} />
-                <Route path="revenue" element={<AdminRevenuePage />} />
                 <Route path="customers" element={<AdminCustomersPage />} />
                 <Route path="staff" element={<AdminStaffPage />} />
               </Route>

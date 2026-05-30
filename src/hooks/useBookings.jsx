@@ -55,6 +55,11 @@ function BookingsProvider({ children }) {
     }
   }, [user]);
 
+  // Fetch bookings on mount and when user changes
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
   useEffect(() => {
     if (!isSupabaseConfigured) {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(bookings));
@@ -106,7 +111,7 @@ function BookingsProvider({ children }) {
         };
 
         if (isSupabaseConfigured && supabase) {
-          const { data, error } = await supabase.from("bookings").insert({
+          const insertData = {
             car_id: draft.car.id,
             user_id: draft.userId,
             start_date: draft.startDate,
@@ -116,7 +121,14 @@ function BookingsProvider({ children }) {
             customer_phone: draft.customerPhone || null,
             total_price: draft.totalPrice,
             status: status
-          }).select('id, created_at').single();
+          };
+
+          // pending_payment bookings require an expires_at (DB constraint)
+          if (status === "pending_payment") {
+            insertData.expires_at = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min
+          }
+
+          const { data, error } = await supabase.from("bookings").insert(insertData).select('id, created_at').single();
           
           if (error) {
             console.error("Error inserting booking into Supabase:", error);

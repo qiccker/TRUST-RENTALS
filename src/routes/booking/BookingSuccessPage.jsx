@@ -13,7 +13,7 @@ function BookingSuccessPage() {
         <CheckCircle2 className="mx-auto h-14 w-14 text-basil" aria-hidden="true" />
         <h1 className="mt-4 text-4xl font-black text-ink">Booking confirmed</h1>
         <p className="mt-3 text-sm leading-6 text-graphite">
-          Your reservation is now in your account. A receipt will be sent after live payment confirmation.
+          Your payment was successful and your reservation is now confirmed. A confirmation receipt has been recorded in your account.
         </p>
 
         {booking ? <div className="mt-8 grid gap-3 rounded-md bg-mist p-5 text-left text-sm">
@@ -28,8 +28,12 @@ function BookingSuccessPage() {
               </strong>
             </span>
             <span className="flex justify-between">
-              <span className="text-graphite">Total</span>
+              <span className="text-graphite">Total paid</span>
               <strong>{formatMoney(booking.totalPrice)}</strong>
+            </span>
+            <span className="flex justify-between">
+              <span className="text-graphite">Status</span>
+              <strong className="capitalize text-basil">{booking.status}</strong>
             </span>
           </div> : null}
 

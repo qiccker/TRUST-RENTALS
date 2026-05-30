@@ -46,15 +46,30 @@ function MyBookingsPage() {
                 </div>
               </div>
 
-              {booking.status !== "cancelled" ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => updateBookingStatus(booking.id, "cancelled")}
-                  leftIcon={<XCircle className="h-4 w-4" aria-hidden="true" />}
-                >
-                  Cancel
-                </Button>
-              ) : null}
+              <div className="flex flex-col gap-2">
+                {booking.status === "confirmed" ? (
+                  <Link to={`/receipt/${booking.id}`}>
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      leftIcon={<ReceiptText className="h-4 w-4" aria-hidden="true" />}
+                    >
+                      Receipt
+                    </Button>
+                  </Link>
+                ) : null}
+                
+                {booking.status !== "cancelled" ? (
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => updateBookingStatus(booking.id, "cancelled")}
+                    leftIcon={<XCircle className="h-4 w-4" aria-hidden="true" />}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </article>
         ))}

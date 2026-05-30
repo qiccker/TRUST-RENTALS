@@ -8,7 +8,6 @@ const adminNav = [
   { to: "/admin/cars", label: "Cars", icon: CarFront },
   { to: "/admin/customers", label: "Customers", icon: UsersRound },
   { to: "/admin/staff", label: "Staff", icon: Contact },
-  { to: "/admin/revenue", label: "Total Sales", icon: IndianRupee },
 ];
 
 function AdminLayout() {

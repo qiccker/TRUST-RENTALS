@@ -181,7 +181,7 @@ export function useCars() {
       return publicUrl;
     } catch (err) {
       console.error("Error uploading image:", err);
-      return null;
+      throw err;
     }
   }, []);
 
@@ -201,6 +201,41 @@ export function useCars() {
     }
   }, []);
 
+  const fetchPaginatedCars = useCallback(async (page = 1, pageSize = 10, includeUnavailable = false) => {
+    if (!isSupabaseConfigured || !supabase) return { data: [], count: 0 };
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    
+    let query = supabase.from("cars").select(`
+      *,
+      car_images (id, url, storage_path, is_primary, sort_order)
+    `, { count: 'exact' }).order('created_at', { ascending: false }).range(from, to);
+
+    if (!includeUnavailable) {
+      query = query.eq('is_available', true);
+    }
+
+    const { data, count, error } = await query;
+    if (error) {
+      console.error("Error fetching paginated cars:", error);
+      return { data: [], count: 0 };
+    }
+    
+    const formattedCars = data.map(car => ({
+      ...car,
+      pricePerDay: Number(car.price_per_day),
+      fuelType: car.fuel_type,
+      luggageCapacity: car.luggage_capacity,
+      isAvailable: car.is_available,
+      images: car.car_images 
+        ? car.car_images.sort((a, b) => a.sort_order - b.sort_order).map(img => img.url)
+        : [],
+      imagesRaw: car.car_images || []
+    }));
+    
+    return { data: formattedCars, count: count || 0 };
+  }, []);
+
   return {
     cars,
     isLoading,
@@ -210,39 +245,6 @@ export function useCars() {
     deleteCar,
     uploadCarImage,
     deleteCarImage,
-    async fetchPaginatedCars(page = 1, pageSize = 10, includeUnavailable = false) {
-      if (!isSupabaseConfigured || !supabase) return { data: [], count: 0 };
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      
-      let query = supabase.from("cars").select(`
-        *,
-        car_images (id, url, storage_path, is_primary, sort_order)
-      `, { count: 'exact' }).order('created_at', { ascending: false }).range(from, to);
-
-      if (!includeUnavailable) {
-        query = query.eq('is_available', true);
-      }
-
-      const { data, count, error } = await query;
-      if (error) {
-        console.error("Error fetching paginated cars:", error);
-        return { data: [], count: 0 };
-      }
-      
-      const formattedCars = data.map(car => ({
-        ...car,
-        pricePerDay: Number(car.price_per_day),
-        fuelType: car.fuel_type,
-        luggageCapacity: car.luggage_capacity,
-        isAvailable: car.is_available,
-        images: car.car_images 
-          ? car.car_images.sort((a, b) => a.sort_order - b.sort_order).map(img => img.url)
-          : [],
-        imagesRaw: car.car_images || []
-      }));
-      
-      return { data: formattedCars, count: count || 0 };
-    }
+    fetchPaginatedCars
   };
 }

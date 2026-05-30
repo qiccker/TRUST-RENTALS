@@ -752,3 +752,7 @@ end;
 $$;
 
 grant execute on function public.admin_update_booking_status(uuid, public.booking_status, text) to authenticated;
+
+-- Razorpay Payment Integration
+alter table public.bookings add column if not exists razorpay_order_id text;
+alter table public.bookings add column if not exists razorpay_payment_id text;

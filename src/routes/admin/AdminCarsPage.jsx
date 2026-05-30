@@ -131,19 +131,24 @@ export function AdminCarsPage() {
     if (!editingCar || !e.target.files?.length) return;
     const file = e.target.files[0];
     setIsUploading(true);
-    const newUrl = await uploadCarImage(editingCar.id, file);
-    if (newUrl) {
-      // Optimistically update
-      setPaginatedCars(current => current.map(c => 
-        c.id === editingCar.id ? { ...c, images: [...(c.images || []), newUrl] } : c
-      ));
-      setEditingCar(prev => ({
-        ...prev,
-        images: [...(prev.images || []), newUrl]
-      }));
+    try {
+      const newUrl = await uploadCarImage(editingCar.id, file);
+      if (newUrl) {
+        // Optimistically update
+        setPaginatedCars(current => current.map(c => 
+          c.id === editingCar.id ? { ...c, images: [...(c.images || []), newUrl] } : c
+        ));
+        setEditingCar(prev => ({
+          ...prev,
+          images: [...(prev.images || []), newUrl]
+        }));
+      }
+    } catch (err) {
+      alert("Upload failed: " + (err.message || "Unknown error"));
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
     }
-    setIsUploading(false);
-    e.target.value = "";
   };
 
   const handleImageDelete = async (img) => {
