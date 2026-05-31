@@ -43,8 +43,8 @@ function ResetPasswordPage() {
         <Button type="submit" isLoading={isSubmitting}>
           Send reset email
         </Button>
-        <Link to="/login" className="text-center text-sm font-bold text-teal">
-          <Button>Back to sign in</Button>
+        <Link to="/login" className="text-center text-sm font-bold text-teal mt-4 hover:underline">
+          Back to sign in
         </Link>
       </form>
     </section>;

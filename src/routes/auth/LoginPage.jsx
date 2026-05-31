@@ -13,7 +13,12 @@ function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const from = location.state?.from ?? "/fleet";
   if (user) {
-    const dest = (user.role === 'admin' || user.role === 'staff') ? '/admin' : from;
+    let dest = from;
+    if (user.role === 'admin' || user.role === 'staff') {
+      dest = from === '/fleet' ? '/admin' : from;
+    } else if (dest.startsWith('/admin')) {
+      dest = '/fleet';
+    }
     return <Navigate to={dest} replace />;
   }
   async function submit(event) {
