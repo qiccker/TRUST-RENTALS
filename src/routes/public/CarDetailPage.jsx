@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { AvailabilityCalendar } from "../../components/fleet/AvailabilityCalendar";
 import { CarGallery } from "../../components/fleet/CarGallery";
+import { ReviewsList } from "../../components/reviews/ReviewsList";
 import { Button } from "../../components/ui/Button";
 import { vehicleTypeLabels } from "../../data/fleet";
 import { formatMoney } from "../../lib/money";
@@ -88,6 +89,7 @@ function CarDetailPage() {
           </Link>
           <CarGallery car={car} />
           <AvailabilityCalendar car={car} />
+          <ReviewsList carId={car.id} />
         </div>
 
         <div className="grid content-start gap-6">

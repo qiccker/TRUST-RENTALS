@@ -1,5 +1,7 @@
-import { CalendarDays, CarFront, ReceiptText, XCircle } from "lucide-react";
+import { CalendarDays, CarFront, ReceiptText, Star, XCircle } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { ReviewForm } from "../../components/reviews/ReviewForm";
 import { Button } from "../../components/ui/Button";
 import { useAuth } from "../../hooks/useAuth";
 import { useBookings } from "../../hooks/useBookings";
@@ -9,6 +11,8 @@ function MyBookingsPage() {
   const { user } = useAuth();
   const { bookings, updateBookingStatus } = useBookings();
   const visibleBookings = bookings.filter((booking) => booking.userId === user?.id || user?.role === "admin");
+  const [reviewOpenFor, setReviewOpenFor] = useState(null);
+
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -48,15 +52,25 @@ function MyBookingsPage() {
 
               <div className="flex flex-col gap-2">
                 {booking.status === "confirmed" ? (
-                  <Link to={`/receipt/${booking.id}`}>
+                  <>
+                    <Link to={`/receipt/${booking.id}`}>
+                      <Button
+                        variant="secondary"
+                        className="w-full"
+                        leftIcon={<ReceiptText className="h-4 w-4" aria-hidden="true" />}
+                      >
+                        Receipt
+                      </Button>
+                    </Link>
                     <Button
                       variant="secondary"
                       className="w-full"
-                      leftIcon={<ReceiptText className="h-4 w-4" aria-hidden="true" />}
+                      leftIcon={<Star className="h-4 w-4" aria-hidden="true" />}
+                      onClick={() => setReviewOpenFor(reviewOpenFor === booking.id ? null : booking.id)}
                     >
-                      Receipt
+                      {reviewOpenFor === booking.id ? "Close Review" : "Write Review"}
                     </Button>
-                  </Link>
+                  </>
                 ) : null}
                 
                 {booking.status !== "cancelled" ? (
@@ -71,6 +85,15 @@ function MyBookingsPage() {
                 ) : null}
               </div>
             </div>
+
+            {/* Review Form — shown when toggled on confirmed bookings */}
+            {reviewOpenFor === booking.id && booking.status === "confirmed" && (
+              <ReviewForm
+                bookingId={booking.id}
+                carId={booking.carId}
+                onReviewSubmitted={() => {}}
+              />
+            )}
           </article>
         ))}
 

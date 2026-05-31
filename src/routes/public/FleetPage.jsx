@@ -15,7 +15,7 @@ function FleetPage() {
   return <>
     <section 
       className="relative min-h-[560px] overflow-hidden bg-ink text-white bg-cover bg-center"
-      style={{ backgroundImage: 'url(/indian-fleet-hero.png)' }}
+      style={{ backgroundImage: 'url(/images/fleet-hero.png)' }}
     >
       <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-transparent" />
       <div className="relative mx-auto flex min-h-[560px] max-w-7xl items-center px-4 py-16 sm:px-6 lg:px-8">

@@ -756,3 +756,33 @@ grant execute on function public.admin_update_booking_status(uuid, public.bookin
 -- Razorpay Payment Integration
 alter table public.bookings add column if not exists razorpay_order_id text;
 alter table public.bookings add column if not exists razorpay_payment_id text;
+
+-- ============================================================
+-- Reviews table
+-- ============================================================
+create table if not exists public.reviews (
+  id uuid primary key default gen_random_uuid(),
+  booking_id uuid not null references public.bookings(id) on delete cascade,
+  car_id uuid not null references public.cars(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  rating integer not null check (rating >= 1 and rating <= 5),
+  comment text,
+  created_at timestamptz not null default now()
+);
+
+-- One review per booking
+create unique index if not exists reviews_booking_unique on public.reviews(booking_id);
+
+-- RLS
+alter table public.reviews enable row level security;
+
+drop policy if exists "reviews_select" on public.reviews;
+create policy "reviews_select" on public.reviews for select using (true);
+
+drop policy if exists "reviews_insert" on public.reviews;
+create policy "reviews_insert" on public.reviews for insert to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "reviews_update" on public.reviews;
+create policy "reviews_update" on public.reviews for update to authenticated
+  using (auth.uid() = user_id);
