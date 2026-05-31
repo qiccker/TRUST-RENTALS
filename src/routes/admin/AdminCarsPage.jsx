@@ -13,7 +13,7 @@ const emptyCarForm = {
   pricePerDay: 0,
   description: "",
   transmission: "automatic",
-  fuelType: "Gasoline",
+  fuelType: "Petrol",
   luggageCapacity: 2,
   features: []
 };
@@ -56,7 +56,7 @@ export function AdminCarsPage() {
         pricePerDay: editingCar.pricePerDay || 0,
         description: editingCar.description || "",
         transmission: editingCar.transmission || "automatic",
-        fuelType: editingCar.fuelType || editingCar.fuel_type || "Gasoline",
+        fuelType: editingCar.fuelType || editingCar.fuel_type || "Petrol",
         luggageCapacity: editingCar.luggageCapacity || 2,
         features: editingCar.features || []
       });
@@ -371,12 +371,16 @@ export function AdminCarsPage() {
                 />
               </div>
 
-              <Input 
-                label="Fuel Type" 
-                value={formData.fuelType} 
-                onChange={(e) => handleFormChange("fuelType", e.target.value)} 
-                placeholder="e.g. Petrol, Diesel, CNG, Electric"
-              />
+              <Select
+                label="Fuel Type"
+                value={formData.fuelType}
+                onChange={(e) => handleFormChange("fuelType", e.target.value)}
+              >
+                <option value="Petrol">Petrol</option>
+                <option value="Diesel">Diesel</option>
+                <option value="Electric">Electric</option>
+                <option value="Hybrid">Hybrid</option>
+              </Select>
 
               <Textarea
                 label="Description"
