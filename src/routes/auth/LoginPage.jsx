@@ -49,15 +49,20 @@ function LoginPage() {
           </div>
 
           <Input label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-          <Input
+  <Input
     label="Password"
     type="password"
     value={password}
     onChange={(event) => setPassword(event.target.value)}
     required
   />
+  <div className="flex justify-end -mt-3">
+    <Link to="/reset-password" className="text-sm font-semibold text-teal hover:underline">
+      Forgot password?
+    </Link>
+  </div>
 
-          {error ? <p className="rounded-md bg-ember/10 px-3 py-2 text-sm font-semibold text-ember">{error}</p> : null}
+  {error ? <p className="rounded-md bg-ember/10 px-3 py-2 text-sm font-semibold text-ember">{error}</p> : null}
 
           <Button type="submit" isLoading={isSubmitting}>
             Sign in

@@ -15,6 +15,7 @@ import { AdminCustomersPage } from "../routes/admin/AdminCustomersPage";
 import { LoginPage } from "../routes/auth/LoginPage";
 import { RegisterPage } from "../routes/auth/RegisterPage";
 import { ResetPasswordPage } from "../routes/auth/ResetPasswordPage";
+import { UpdatePasswordPage } from "../routes/auth/UpdatePasswordPage";
 import { BookingCancelPage } from "../routes/booking/BookingCancelPage";
 import { BookingPage } from "../routes/booking/BookingPage";
 import { BookingSuccessPage } from "../routes/booking/BookingSuccessPage";
@@ -39,6 +40,7 @@ function App() {
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
               <Route path="reset-password" element={<ResetPasswordPage />} />
+              <Route path="update-password" element={<UpdatePasswordPage />} />
 
               <Route path="account" element={<AccountLayout />}>
                 <Route index element={<Navigate to="/account/profile" replace />} />

@@ -60,20 +60,12 @@ export function AccountProfilePage() {
         .upload(licensePath, licenseFile);
       if (licenseError) throw licenseError;
 
-      const { data: { publicUrl: govIdUrl } } = supabase.storage
-        .from("customer-documents")
-        .getPublicUrl(govIdPath);
-
-      const { data: { publicUrl: licenseUrl } } = supabase.storage
-        .from("customer-documents")
-        .getPublicUrl(licensePath);
-
-      // Update profile
+      // Update profile with the paths, NOT public URLs (since bucket is private)
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
-          gov_id_url: govIdUrl,
-          driving_license_url: licenseUrl,
+          gov_id_url: govIdPath,
+          driving_license_url: licensePath,
           document_status: "pending"
         })
         .eq("id", user.id);

@@ -9,9 +9,9 @@ Object.assign(process.env, loadEnv("development", process.cwd(), ""));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function vercelApiPlugin() {
+function localApiPlugin() {
   return {
-    name: 'vercel-api',
+    name: 'local-api',
     configureServer(server) {
       server.middlewares.use('/api', async (req, res, next) => {
         try {
@@ -46,7 +46,7 @@ function vercelApiPlugin() {
 }
 
 export default defineConfig({
-  plugins: [react(), vercelApiPlugin()],
+  plugins: [react(), localApiPlugin()],
   server: {
     port: 5173,
   },

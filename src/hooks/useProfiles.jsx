@@ -68,10 +68,28 @@ export function useProfiles() {
   const getSignedDocumentUrl = useCallback(async (path) => {
     if (!isSupabaseConfigured || !supabase || !path) return path;
     
-    if (path.startsWith('http') || path.startsWith('/images/')) return path;
+    // Ignore static mock images
+    if (path.startsWith('/images/')) return path;
+
+    let storagePath = path;
+    
+    // If the database previously saved the full public URL, we must extract just the storage path
+    if (path.startsWith('http')) {
+       try {
+         const url = new URL(path);
+         // Format is usually /storage/v1/object/public/customer-documents/uuid/filename.jpg
+         const parts = url.pathname.split('customer-documents/');
+         if (parts.length > 1) {
+           storagePath = parts[1]; 
+         }
+       } catch (e) {
+         return path;
+       }
+    }
 
     try {
-      const { data, error } = await supabase.storage.from("customer-documents").createSignedUrl(path, 60 * 60);
+      // customer-documents is a private bucket, so we MUST generate a signed URL
+      const { data, error } = await supabase.storage.from("customer-documents").createSignedUrl(storagePath, 60 * 60);
       if (error) throw error;
       return data.signedUrl;
     } catch (err) {
@@ -79,6 +97,27 @@ export function useProfiles() {
       return null;
     }
   }, []);
+
+  const fetchPaginatedProfiles = useCallback(async (roleFilter, page = 1, pageSize = 10) => {
+    if (!isSupabaseConfigured || !supabase || !user) return { data: [], count: 0 };
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    
+    let query = supabase.from("profiles").select("*", { count: 'exact' }).order("created_at", { ascending: false }).range(from, to);
+    
+    if (roleFilter === 'customer') {
+      query = query.eq('role', 'customer');
+    } else if (roleFilter === 'staff') {
+      query = query.in('role', ['staff', 'admin']);
+    }
+
+    const { data, count, error } = await query;
+    if (error) {
+      console.error("Error fetching paginated profiles:", error);
+      return { data: [], count: 0 };
+    }
+    return { data: data || [], count: count || 0 };
+  }, [user]);
 
   return {
     profiles,
@@ -91,25 +130,6 @@ export function useProfiles() {
     updateDocumentStatus,
     deleteProfile,
     getSignedDocumentUrl,
-    async fetchPaginatedProfiles(roleFilter, page = 1, pageSize = 10) {
-      if (!isSupabaseConfigured || !supabase || !user) return { data: [], count: 0 };
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      
-      let query = supabase.from("profiles").select("*", { count: 'exact' }).order("created_at", { ascending: false }).range(from, to);
-      
-      if (roleFilter === 'customer') {
-        query = query.eq('role', 'customer');
-      } else if (roleFilter === 'staff') {
-        query = query.in('role', ['staff', 'admin']);
-      }
-
-      const { data, count, error } = await query;
-      if (error) {
-        console.error("Error fetching paginated profiles:", error);
-        return { data: [], count: 0 };
-      }
-      return { data: data || [], count: count || 0 };
-    }
+    fetchPaginatedProfiles
   };
 }
