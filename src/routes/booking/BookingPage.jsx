@@ -1,5 +1,5 @@
 import { CreditCard, LockKeyhole, QrCode, ShieldAlert, ShieldCheck, XCircle } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { BookingSummary } from "../../components/booking/BookingSummary";
 import { CustomerInfoForm } from "../../components/booking/CustomerInfoForm";
@@ -30,10 +30,6 @@ function BookingPage() {
   const [paymentMethod, setPaymentMethod] = useState("upi");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // QR Code payment state
-  const [qrData, setQrData] = useState(null);
-  const pollIntervalRef = useRef(null);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'staff';
 
@@ -82,40 +78,6 @@ function BookingPage() {
     }
     loadCar();
   }, [slug]);
-
-  // Poll for QR code payment
-  useEffect(() => {
-    if (!qrData) return;
-
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const res = await fetch("/api/razorpay/check-payment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            linkId: qrData.linkId,
-            bookingId: qrData.bookingId,
-          }),
-        });
-        const data = await res.json();
-
-        if (data.paid) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-          navigate(`/success?booking=${qrData.bookingId}`);
-        }
-      } catch (err) {
-        console.error("Payment check error:", err);
-      }
-    }, 4000);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-    };
-  }, [qrData, navigate]);
 
   const validation = useMemo(
     () => car ? validateBookingRange(car, startDate, endDate) : { ok: false, message: "Car not found." },
@@ -192,22 +154,76 @@ function BookingPage() {
         return;
       }
 
-      // Generate Native QR directly in the page
-      const qrRes = await fetch("/api/razorpay/create-qr", {
+      // Step 1: Load Razorpay script dynamically
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      await new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("Razorpay SDK failed to load. Check your internet connection."));
+        document.body.appendChild(script);
+      });
+
+      // Step 2: Create Razorpay Order
+      const orderRes = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bookingId: booking.id, amount: validation.totalPrice })
       });
-      const qrResult = await qrRes.json();
-      if (!qrRes.ok) throw new Error(qrResult.error || "Failed to generate payment QR code.");
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) throw new Error(orderData.error || "Failed to generate payment order.");
 
-      setQrData({
-        linkId: qrResult.linkId,
-        imageUrl: qrResult.qrImageUrl,
-        amount: validation.totalPrice,
-        bookingId: booking.id,
+      // Step 3: Open Razorpay Checkout Modal
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Trust Rentals",
+        description: `Booking #${booking.id.slice(0, 8)}`,
+        order_id: orderData.orderId,
+        prefill: {
+          name: customer.customerName,
+          email: customer.customerEmail,
+          contact: customer.customerPhone
+        },
+        theme: {
+          color: "#0f766e" // Tailwind Teal-600
+        },
+        handler: async function (response) {
+          // Success callback! Verify payment on backend
+          const verifyRes = await fetch("/api/razorpay/verify-payment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+              bookingId: booking.id
+            })
+          });
+          if (verifyRes.ok) {
+            navigate(`/success?booking=${booking.id}`);
+          } else {
+            setError("Payment verification failed. Please contact support.");
+            setIsSubmitting(false);
+          }
+        },
+        modal: {
+          ondismiss: async function () {
+            // User closed the modal
+            await supabase.from("bookings").update({ status: "payment_failed" }).eq("id", booking.id);
+            setError("Payment was cancelled.");
+            setIsSubmitting(false);
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', async function (response) {
+        await supabase.from("bookings").update({ status: "payment_failed" }).eq("id", booking.id);
+        setError("Payment failed: " + response.error.description);
+        setIsSubmitting(false);
       });
-      setIsSubmitting(false);
+      rzp.open();
     } catch (err) {
       if (createdBookingId) {
         await supabase.from("bookings").update({ status: "payment_failed" }).eq("id", createdBookingId);
@@ -215,61 +231,6 @@ function BookingPage() {
       setError(err.message || "Payment failed. Please try again.");
       setIsSubmitting(false);
     }
-  }
-
-  function handleCancelPayment() {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-    if (qrData?.bookingId) {
-      supabase.from("bookings").update({ status: "payment_failed" }).eq("id", qrData.bookingId).then(() => {});
-    }
-    setQrData(null);
-    setError("Payment was cancelled. You can try again.");
-  }
-
-  if (qrData) {
-    return (
-      <section className="bg-mist py-10">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8">
-          <div className="rounded-md border border-line bg-white p-8 shadow-sm">
-            <div className="text-center mb-8">
-              <p className="text-sm font-bold uppercase tracking-[0.16em] text-teal">Payment</p>
-              <h1 className="mt-2 text-3xl font-black text-ink">Scan & Pay</h1>
-              <p className="mt-2 text-sm text-graphite max-w-md mx-auto">
-                Open any UPI app (Google Pay, PhonePe, Paytm, etc.) and scan the QR code below to complete your payment.
-              </p>
-            </div>
-            <div className="mx-auto w-fit">
-              <div className="rounded-2xl border-2 border-teal/20 bg-gradient-to-b from-teal/5 to-white p-6 shadow-sm">
-                <img src={qrData.imageUrl} alt="Payment QR Code — Scan with any UPI app" className="mx-auto h-64 w-64 rounded-md" />
-              </div>
-            </div>
-            <div className="mt-6 text-center">
-              <p className="text-4xl font-black text-ink">{formatMoney(qrData.amount)}</p>
-              <p className="mt-1 text-sm text-graphite">Total amount to pay</p>
-            </div>
-            <div className="mt-8 flex items-center justify-center gap-3 rounded-md bg-teal/5 border border-teal/10 px-4 py-3">
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal opacity-75" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-teal" />
-              </span>
-              <span className="text-sm font-semibold text-teal">Waiting for payment confirmation...</span>
-            </div>
-            <div className="mt-6 text-center">
-              <p className="text-xs text-graphite">Supported UPI apps: Google Pay • PhonePe • Paytm • BHIM • Any UPI app</p>
-            </div>
-            <div className="mt-6 text-center">
-              <button type="button" className="inline-flex items-center gap-2 text-sm font-semibold text-ember hover:underline transition" onClick={handleCancelPayment}>
-                <XCircle className="h-4 w-4" /> Cancel payment
-              </button>
-            </div>
-          </div>
-          <BookingSummary car={car} startDate={startDate} endDate={endDate} />
-        </div>
-      </section>
-    );
   }
 
   return (
@@ -313,7 +274,7 @@ function BookingPage() {
                 <label className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border-2 px-4 py-3 font-bold transition ${paymentMethod === "upi" ? "border-teal bg-teal/5 text-teal" : "border-line bg-white text-graphite hover:border-teal/30"}`}>
                   <input type="radio" name="paymentMethod" value="upi" checked={paymentMethod === "upi"} onChange={(e) => setPaymentMethod(e.target.value)} className="sr-only" />
                   <QrCode className="h-5 w-5" />
-                  Pay via UPI (QR)
+                  Pay via UPI
                 </label>
                 <label className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border-2 px-4 py-3 font-bold transition ${paymentMethod === "cash" ? "border-teal bg-teal/5 text-teal" : "border-line bg-white text-graphite hover:border-teal/30"}`}>
                   <input type="radio" name="paymentMethod" value="cash" checked={paymentMethod === "cash"} onChange={(e) => setPaymentMethod(e.target.value)} className="sr-only" />
@@ -350,7 +311,7 @@ function BookingPage() {
                   {paymentMethod === "upi" ? "Secure UPI payment via Razorpay" : "Pay securely when you arrive"}
                 </p>
                 <Button type="submit" isLoading={isSubmitting} disabled={!validation.ok || user?.documentStatus !== "verified"} leftIcon={paymentMethod === "upi" ? <QrCode className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}>
-                  {paymentMethod === "upi" ? `Pay ${formatMoney(validation.totalPrice)} via QR` : "Reserve with Cash"}
+                  {paymentMethod === "upi" ? `Pay ${formatMoney(validation.totalPrice)} via UPI` : "Reserve with Cash"}
                 </Button>
               </>
             )}
