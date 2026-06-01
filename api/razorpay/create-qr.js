@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { amount, bookingId } = await readJson(req);
+    const { amount, bookingId, customerName, customerEmail, customerPhone } = await readJson(req);
 
     if (!amount || amount <= 0) {
       return sendJson(res, 400, { error: "A positive amount is required." });
@@ -15,61 +15,75 @@ export default async function handler(req, res) {
 
     const keyId = requireEnv("RAZORPAY_KEY_ID");
     const keySecret = requireEnv("RAZORPAY_KEY_SECRET");
-
-    // Amount must be in paise (smallest currency unit) — ₹1 = 100 paise
+    const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
     const amountInPaise = Math.round(Number(amount) * 100);
 
-    // Expire after 30 minutes
-    const expireBy = Math.floor(Date.now() / 1000) + 30 * 60;
+    // Step 1: Create a Customer in Razorpay
+    let customerId;
+    try {
+      const custRes = await fetch("https://api.razorpay.com/v1/customers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Basic ${credentials}`,
+        },
+        body: JSON.stringify({
+          name: customerName || "Guest",
+          email: customerEmail || "guest@trustrentals.com",
+          contact: customerPhone || undefined
+        })
+      });
+      const custData = await custRes.json();
+      if (!custRes.ok) {
+        throw new Error(custData.error?.description || "Failed to create Razorpay customer.");
+      }
+      customerId = custData.id;
+    } catch (err) {
+      console.error("Error creating customer:", err);
+      return sendJson(res, 502, { error: "Failed to create customer for QR Code." });
+    }
 
-    const payload = JSON.stringify({
-      amount: amountInPaise,
-      currency: "INR",
-      accept_partial: false,
-      description: bookingId
-        ? `Trust Rentals — Booking #${String(bookingId).slice(0, 8)}`
-        : "Trust Rentals — Car Rental Payment",
-      expire_by: expireBy,
-      reference_id: bookingId || undefined,
-      notify: {
-        sms: false,
-        email: false,
-      },
-      notes: {
-        booking_id: bookingId || "",
-        source: "trust-rentals",
-      },
-    });
-
-    const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
-
-    const response = await fetch("https://api.razorpay.com/v1/payment_links", {
+    // Step 2: Create the UPI QR Code
+    const expireBy = Math.floor(Date.now() / 1000) + 30 * 60; // 30 mins
+    
+    const qrRes = await fetch("https://api.razorpay.com/v1/payments/qr_codes", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Basic ${credentials}`,
       },
-      body: payload,
+      body: JSON.stringify({
+        type: "upi_qr",
+        name: "Trust Rentals",
+        usage: "single_use",
+        fixed_amount: true,
+        payment_amount: amountInPaise,
+        description: bookingId ? `Booking #${String(bookingId).slice(0, 8)}` : "Car Rental Payment",
+        customer_id: customerId,
+        close_by: expireBy,
+        notes: {
+          booking_id: bookingId || "",
+          source: "trust-rentals",
+        },
+      }),
     });
 
-    const data = await response.json();
+    const qrData = await qrRes.json();
 
-    if (!response.ok) {
-      console.error("Razorpay Payment Link creation failed:", data);
+    if (!qrRes.ok) {
+      console.error("Razorpay QR creation failed:", qrData);
       return sendJson(res, 502, {
-        error: data.error?.description || "Failed to create payment link.",
+        error: qrData.error?.description || "Failed to create UPI QR code.",
       });
     }
 
-    // Generate QR code image from the payment link URL
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data.short_url)}`;
-
+    // qrData.image_url is the Razorpay-hosted image of the UPI QR code!
     return sendJson(res, 200, {
-      linkId: data.id,
-      paymentUrl: data.short_url,
-      qrImageUrl,
-      amount: data.amount,
-      currency: data.currency,
+      linkId: qrData.id,
+      paymentUrl: qrData.image_url,
+      qrImageUrl: qrData.image_url,
+      amount: amountInPaise / 100, // Back to rupees
+      currency: "INR",
     });
   } catch (err) {
     console.error("create-qr error:", err);

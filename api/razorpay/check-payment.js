@@ -17,9 +17,9 @@ export default async function handler(req, res) {
     const keySecret = requireEnv("RAZORPAY_KEY_SECRET");
     const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
 
-    // Check payment link status from Razorpay
+    // Check QR code status from Razorpay
     const response = await fetch(
-      `https://api.razorpay.com/v1/payment_links/${linkId}`,
+      `https://api.razorpay.com/v1/payments/qr_codes/${linkId}`,
       {
         headers: { Authorization: `Basic ${credentials}` },
       }
@@ -28,41 +28,36 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Razorpay Payment Link check failed:", data);
+      console.error("Razorpay QR check failed:", data);
       return sendJson(res, 502, { error: "Failed to check payment status." });
     }
 
-    const paid = data.status === "paid";
-    let paymentId = null;
+    const paid = data.payments_amount_received >= data.payment_amount;
+    let paymentId = paid ? linkId : null; // Use QR ID as payment reference
 
-    if (paid && data.payments && data.payments.length > 0) {
-      paymentId = data.payments[0].payment_id;
-
-      // Update booking status to confirmed in the database
-      if (bookingId && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY !== "YOUR_SERVICE_ROLE_KEY") {
-        try {
-          const { createSupabaseAdminClient } = await import("../_lib/supabase.js");
-          const supabase = createSupabaseAdminClient();
-          await supabase
-            .from("bookings")
-            .update({
-              status: "confirmed",
-              razorpay_payment_id: paymentId,
-              confirmed_at: new Date().toISOString(),
-            })
-            .eq("id", bookingId);
-        } catch (dbErr) {
-          console.error("Failed to confirm booking in DB:", dbErr);
-          // Non-fatal — we still return paid=true so user sees success
-        }
+    if (paid && bookingId && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY !== "YOUR_SERVICE_ROLE_KEY") {
+      try {
+        const { createSupabaseAdminClient } = await import("../_lib/supabase.js");
+        const supabase = createSupabaseAdminClient();
+        await supabase
+          .from("bookings")
+          .update({
+            status: "confirmed",
+            razorpay_payment_id: paymentId,
+            confirmed_at: new Date().toISOString(),
+          })
+          .eq("id", bookingId);
+      } catch (dbErr) {
+        console.error("Failed to confirm booking in DB:", dbErr);
+        // Non-fatal — we still return paid=true so user sees success
       }
     }
 
     return sendJson(res, 200, {
       paid,
       paymentId,
-      status: data.status,
-      amountReceived: data.amount_paid,
+      status: paid ? "paid" : "pending",
+      amountReceived: data.payments_amount_received,
     });
   } catch (err) {
     console.error("check-payment error:", err);

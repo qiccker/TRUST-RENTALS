@@ -218,6 +218,9 @@ function BookingPage() {
         body: JSON.stringify({
           bookingId: booking.id,
           amount: validation.totalPrice,
+          customerName: customer.customerName.trim(),
+          customerEmail: customer.customerEmail.trim(),
+          customerPhone: customer.customerPhone.trim() || undefined,
         }),
       });
 
