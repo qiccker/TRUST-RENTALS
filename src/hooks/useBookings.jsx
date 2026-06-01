@@ -133,7 +133,7 @@ function BookingsProvider({ children }) {
           if (error) {
             console.error("Error inserting booking into Supabase:", error);
             if (error.message && error.message.includes("bookings_no_overlapping_active_dates")) {
-              throw new Error("YOU HAVE BOOKED AN OTHER CAR ON THIS DATE");
+              throw new Error("This car has just been booked for these dates. Please choose different dates or another car.");
             }
             throw error;
           }

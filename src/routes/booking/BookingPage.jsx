@@ -27,6 +27,7 @@ function BookingPage() {
     customerEmail: user?.email ?? "",
     customerPhone: user?.phone ?? ""
   });
+  const [paymentMethod, setPaymentMethod] = useState("upi");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -50,7 +51,6 @@ function BookingPage() {
           .eq("slug", slug)
           .single();
         if (error) throw error;
-        // Fetch existing bookings to block dates
         const { data: bookingsData } = await supabase
           .from("bookings")
           .select("start_date, end_date")
@@ -149,27 +149,15 @@ function BookingPage() {
       </section>;
   }
 
-  /** Admin/staff flow — direct booking without payment gateway */
   async function handleAdminSubmit(event, bookingStatus) {
     if (event) event.preventDefault();
     setError("");
-    if (!validation.ok) {
-      setError(validation.message);
-      return;
-    }
-    if (!customer.customerName.trim() || !customer.customerEmail.trim()) {
-      setError("Name and email are required.");
-      return;
-    }
+    if (!validation.ok) { setError(validation.message); return; }
+    if (!customer.customerName.trim() || !customer.customerEmail.trim()) { setError("Name and email are required."); return; }
     setIsSubmitting(true);
     const draft = {
-      car,
-      userId: user.id,
-      startDate,
-      endDate,
-      customerName: customer.customerName.trim(),
-      customerEmail: customer.customerEmail.trim(),
-      customerPhone: customer.customerPhone.trim(),
+      car, userId: user.id, startDate, endDate,
+      customerName: customer.customerName.trim(), customerEmail: customer.customerEmail.trim(), customerPhone: customer.customerPhone.trim(),
       totalPrice: validation.totalPrice
     };
     try {
@@ -181,56 +169,38 @@ function BookingPage() {
     }
   }
 
-  /** Customer flow — create booking then show Razorpay QR code */
   async function handlePayNow(event) {
     if (event) event.preventDefault();
     setError("");
-    if (!validation.ok) {
-      setError(validation.message);
-      return;
-    }
-    if (!customer.customerName.trim() || !customer.customerEmail.trim()) {
-      setError("Name and email are required.");
-      return;
-    }
+    if (!validation.ok) { setError(validation.message); return; }
+    if (!customer.customerName.trim() || !customer.customerEmail.trim()) { setError("Name and email are required."); return; }
     setIsSubmitting(true);
 
     let createdBookingId = null;
     try {
-      // Step 1: Create booking with pending_payment status
       const draft = {
-        car,
-        userId: user.id,
-        startDate,
-        endDate,
-        customerName: customer.customerName.trim(),
-        customerEmail: customer.customerEmail.trim(),
-        customerPhone: customer.customerPhone.trim(),
+        car, userId: user.id, startDate, endDate,
+        customerName: customer.customerName.trim(), customerEmail: customer.customerEmail.trim(), customerPhone: customer.customerPhone.trim(),
         totalPrice: validation.totalPrice
       };
       const booking = await createBooking(draft, "pending_payment");
       createdBookingId = booking.id;
 
-      // Step 2: Get QR code from our API
+      if (paymentMethod === "cash") {
+        setIsSubmitting(false);
+        navigate(`/success?booking=${booking.id}`);
+        return;
+      }
+
+      // Generate Native QR directly in the page
       const qrRes = await fetch("/api/razorpay/create-qr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookingId: booking.id,
-          amount: validation.totalPrice,
-          customerName: customer.customerName.trim(),
-          customerEmail: customer.customerEmail.trim(),
-          customerPhone: customer.customerPhone.trim() || undefined,
-        }),
+        body: JSON.stringify({ bookingId: booking.id, amount: validation.totalPrice })
       });
-
       const qrResult = await qrRes.json();
+      if (!qrRes.ok) throw new Error(qrResult.error || "Failed to generate payment QR code.");
 
-      if (!qrRes.ok) {
-        throw new Error(qrResult.error || "Failed to generate payment QR code.");
-      }
-
-      // Step 3: Show QR code — polling starts via useEffect
       setQrData({
         linkId: qrResult.linkId,
         imageUrl: qrResult.qrImageUrl,
@@ -240,41 +210,30 @@ function BookingPage() {
       setIsSubmitting(false);
     } catch (err) {
       if (createdBookingId) {
-        // Rollback booking to free up dates
-        await supabase
-          .from("bookings")
-          .update({ status: "payment_failed" })
-          .eq("id", createdBookingId);
+        await supabase.from("bookings").update({ status: "payment_failed" }).eq("id", createdBookingId);
       }
       setError(err.message || "Payment failed. Please try again.");
       setIsSubmitting(false);
     }
   }
 
-  /** Cancel the QR payment and rollback booking */
   function handleCancelPayment() {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
     if (qrData?.bookingId) {
-      supabase
-        .from("bookings")
-        .update({ status: "payment_failed" })
-        .eq("id", qrData.bookingId)
-        .then(() => {});
+      supabase.from("bookings").update({ status: "payment_failed" }).eq("id", qrData.bookingId).then(() => {});
     }
     setQrData(null);
     setError("Payment was cancelled. You can try again.");
   }
 
-  // ── QR Code Payment Screen ────────────────────────────────────
   if (qrData) {
     return (
       <section className="bg-mist py-10">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8">
           <div className="rounded-md border border-line bg-white p-8 shadow-sm">
-            {/* Header */}
             <div className="text-center mb-8">
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-teal">Payment</p>
               <h1 className="mt-2 text-3xl font-black text-ink">Scan & Pay</h1>
@@ -282,72 +241,48 @@ function BookingPage() {
                 Open any UPI app (Google Pay, PhonePe, Paytm, etc.) and scan the QR code below to complete your payment.
               </p>
             </div>
-
-            {/* QR Code */}
             <div className="mx-auto w-fit">
               <div className="rounded-2xl border-2 border-teal/20 bg-gradient-to-b from-teal/5 to-white p-6 shadow-sm">
-                <img
-                  src={qrData.imageUrl}
-                  alt="Payment QR Code — Scan with any UPI app"
-                  className="mx-auto h-64 w-64 rounded-md"
-                />
+                <img src={qrData.imageUrl} alt="Payment QR Code — Scan with any UPI app" className="mx-auto h-64 w-64 rounded-md" />
               </div>
             </div>
-
-            {/* Amount */}
             <div className="mt-6 text-center">
               <p className="text-4xl font-black text-ink">{formatMoney(qrData.amount)}</p>
               <p className="mt-1 text-sm text-graphite">Total amount to pay</p>
             </div>
-
-            {/* Waiting indicator */}
             <div className="mt-8 flex items-center justify-center gap-3 rounded-md bg-teal/5 border border-teal/10 px-4 py-3">
               <span className="relative flex h-3 w-3">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal opacity-75" />
                 <span className="relative inline-flex h-3 w-3 rounded-full bg-teal" />
               </span>
-              <span className="text-sm font-semibold text-teal">
-                Waiting for payment confirmation...
-              </span>
+              <span className="text-sm font-semibold text-teal">Waiting for payment confirmation...</span>
             </div>
-
-            {/* UPI apps row */}
             <div className="mt-6 text-center">
-              <p className="text-xs text-graphite">
-                Supported UPI apps: Google Pay • PhonePe • Paytm • BHIM • Any UPI app
-              </p>
+              <p className="text-xs text-graphite">Supported UPI apps: Google Pay • PhonePe • Paytm • BHIM • Any UPI app</p>
             </div>
-
-            {/* Cancel */}
             <div className="mt-6 text-center">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-ember hover:underline transition"
-                onClick={handleCancelPayment}
-              >
-                <XCircle className="h-4 w-4" />
-                Cancel payment
+              <button type="button" className="inline-flex items-center gap-2 text-sm font-semibold text-ember hover:underline transition" onClick={handleCancelPayment}>
+                <XCircle className="h-4 w-4" /> Cancel payment
               </button>
             </div>
           </div>
-
           <BookingSummary car={car} startDate={startDate} endDate={endDate} />
         </div>
       </section>
     );
   }
 
-  // ── Booking Form Screen ───────────────────────────────────────
-  return <section className="bg-mist py-10">
+  return (
+    <section className="bg-mist py-10">
       <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8">
         <form className="grid gap-6 rounded-md border border-line bg-white p-6 shadow-sm" onSubmit={isAdmin ? (e) => handleAdminSubmit(e, "pending_payment") : handlePayNow}>
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.16em] text-teal">Online booking</p>
-              <h1 className="mt-2 text-4xl font-black text-ink">Reserve {car.name}</h1>
+            <h1 className="mt-2 text-4xl font-black text-ink">Reserve {car.name}</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-graphite">
               {isAdmin
                 ? "Choose dates, confirm driver contact details, and secure the reservation."
-                : "Choose dates, confirm your details, and pay via UPI QR code to lock in your reservation."}
+                : "Choose dates, your details, and payment method to lock in your reservation."}
             </p>
           </div>
 
@@ -357,15 +292,13 @@ function BookingPage() {
               startDate={startDate} 
               endDate={endDate} 
               bookedRanges={car.bookedRanges}
-              onChange={(value) => {
-                setStartDate(value.startDate);
-                setEndDate(value.endDate);
-              }} 
+              onChange={(value) => { setStartDate(value.startDate); setEndDate(value.endDate); }} 
             />
-            {!validation.ok && startDate && endDate ? <p className="inline-flex items-center gap-2 rounded-md bg-ember/10 px-3 py-2 text-sm font-semibold text-ember">
-                <ShieldAlert className="h-4 w-4" aria-hidden="true" />
-                {validation.message}
-              </p> : null}
+            {!validation.ok && startDate && endDate && (
+              <p className="inline-flex items-center gap-2 rounded-md bg-ember/10 px-3 py-2 text-sm font-semibold text-ember">
+                <ShieldAlert className="h-4 w-4" aria-hidden="true" /> {validation.message}
+              </p>
+            )}
           </section>
 
           <section className="grid gap-4">
@@ -373,64 +306,51 @@ function BookingPage() {
             <CustomerInfoForm value={customer} onChange={setCustomer} />
           </section>
 
+          {!isAdmin && (
+            <section className="grid gap-4">
+              <h2 className="text-xl font-black text-ink">Payment Method</h2>
+              <div className="flex gap-4">
+                <label className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border-2 px-4 py-3 font-bold transition ${paymentMethod === "upi" ? "border-teal bg-teal/5 text-teal" : "border-line bg-white text-graphite hover:border-teal/30"}`}>
+                  <input type="radio" name="paymentMethod" value="upi" checked={paymentMethod === "upi"} onChange={(e) => setPaymentMethod(e.target.value)} className="sr-only" />
+                  <QrCode className="h-5 w-5" />
+                  Pay via UPI (QR)
+                </label>
+                <label className={`flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border-2 px-4 py-3 font-bold transition ${paymentMethod === "cash" ? "border-teal bg-teal/5 text-teal" : "border-line bg-white text-graphite hover:border-teal/30"}`}>
+                  <input type="radio" name="paymentMethod" value="cash" checked={paymentMethod === "cash"} onChange={(e) => setPaymentMethod(e.target.value)} className="sr-only" />
+                  <CreditCard className="h-5 w-5" />
+                  Cash on Arrival
+                </label>
+              </div>
+            </section>
+          )}
+
           {user?.documentStatus !== "verified" && (
             <div className="rounded-md bg-saffron/10 p-4 border border-saffron/20">
-              <p className="text-sm font-semibold text-ink flex items-center gap-2">
-                <ShieldAlert className="h-4 w-4 text-saffron" />
-                Profile Verification Required
-              </p>
-              <p className="mt-1 text-xs text-graphite">
-                You must complete your profile by uploading your ID and Driving License before you can book a vehicle. 
-                Current status: <strong className="capitalize">{user?.documentStatus || "unsubmitted"}</strong>
-              </p>
-              <Link to="/account/profile" className="mt-3 inline-block">
-                <Button variant="secondary" className="h-8 text-xs">
-                  Go to My Profile
-                </Button>
-              </Link>
+              <p className="text-sm font-semibold text-ink flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-saffron" /> Profile Verification Required</p>
+              <p className="mt-1 text-xs text-graphite">You must complete your profile by uploading your ID and Driving License before you can book a vehicle. Current status: <strong className="capitalize">{user?.documentStatus || "unsubmitted"}</strong></p>
+              <Link to="/account/profile" className="mt-3 inline-block"><Button variant="secondary" className="h-8 text-xs">Go to My Profile</Button></Link>
             </div>
           )}
 
-          {error ? <p className="rounded-md bg-ember/10 px-3 py-2 text-sm font-semibold text-ember">{error}</p> : null}
+          {error && <p className="rounded-md bg-ember/10 px-3 py-2 text-sm font-semibold text-ember">{error}</p>}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
             {isAdmin ? (
               <>
-                <p className="text-sm text-graphite">
-                  Admin/staff: booking will be created with the selected status.
-                </p>
+                <p className="text-sm text-graphite">Admin/staff: booking will be created with the selected status.</p>
                 <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    isLoading={isSubmitting}
-                    disabled={!validation.ok || user?.documentStatus !== "verified"}
-                    onClick={() => handleAdminSubmit(null, "confirmed")}
-                  >
-                    Approve (Paid)
-                  </Button>
-                  <Button
-                    type="submit"
-                    isLoading={isSubmitting}
-                    disabled={!validation.ok || user?.documentStatus !== "verified"}
-                  >
-                    Reserve (Pending)
-                  </Button>
+                  <Button type="button" variant="secondary" isLoading={isSubmitting} disabled={!validation.ok || user?.documentStatus !== "verified"} onClick={() => handleAdminSubmit(null, "confirmed")}>Approve (Paid)</Button>
+                  <Button type="submit" isLoading={isSubmitting} disabled={!validation.ok || user?.documentStatus !== "verified"}>Reserve (Pending)</Button>
                 </div>
               </>
             ) : (
               <>
                 <p className="inline-flex items-center gap-2 text-sm text-graphite">
                   <ShieldCheck className="h-4 w-4 text-basil" aria-hidden="true" />
-                  Secure UPI payment via Razorpay
+                  {paymentMethod === "upi" ? "Secure UPI payment via Razorpay" : "Pay securely when you arrive"}
                 </p>
-                <Button
-                  type="submit"
-                  isLoading={isSubmitting}
-                  disabled={!validation.ok || user?.documentStatus !== "verified"}
-                  leftIcon={<QrCode className="h-4 w-4" aria-hidden="true" />}
-                >
-                  {validation.ok ? `Pay ${formatMoney(validation.totalPrice)} via UPI` : "Pay via UPI"}
+                <Button type="submit" isLoading={isSubmitting} disabled={!validation.ok || user?.documentStatus !== "verified"} leftIcon={paymentMethod === "upi" ? <QrCode className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}>
+                  {paymentMethod === "upi" ? `Pay ${formatMoney(validation.totalPrice)} via QR` : "Reserve with Cash"}
                 </Button>
               </>
             )}
@@ -439,8 +359,7 @@ function BookingPage() {
 
         <BookingSummary car={car} startDate={startDate} endDate={endDate} />
       </div>
-    </section>;
+    </section>
+  );
 }
-export {
-  BookingPage
-};
+export { BookingPage };
