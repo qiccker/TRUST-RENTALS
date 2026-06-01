@@ -26,7 +26,6 @@ export default async function handler(req, res) {
         fixed_amount: true,
         payment_amount: amountInPaise,
         description: bookingId ? `Booking #${String(bookingId).slice(0, 8)}` : "Car Rental Payment",
-        close_by: expireBy,
         notes: {
           booking_id: bookingId || "",
           source: "trust-rentals",
