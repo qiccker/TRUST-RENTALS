@@ -94,6 +94,10 @@ export function useProfiles() {
       return data.signedUrl;
     } catch (err) {
       console.error("Error signing URL:", err);
+      // Fallback for missing bucket or other storage errors
+      if (err.message && err.message.includes("Bucket not found")) {
+        return "https://via.placeholder.com/300?text=Document+unavailable";
+      }
       return null;
     }
   }, []);

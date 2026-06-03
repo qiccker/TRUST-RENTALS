@@ -237,14 +237,10 @@ export function AdminCustomersPage() {
                     )}
 
                     {/* Approve / Reject actions */}
-                    {selectedCustomer.document_status === 'pending' && (
+                    {(selectedCustomer.document_status === 'pending' || (!selectedCustomer.document_status && (selectedCustomer.gov_id_url || selectedCustomer.driving_license_url))) && (
                       <div className="grid grid-cols-2 gap-3 mt-1">
-                        <Button variant="danger" onClick={() => handleVerify('rejected')}>
-                          Reject Documents
-                        </Button>
-                        <Button onClick={() => handleVerify('verified')}>
-                          Approve ✓
-                        </Button>
+                        <Button variant="danger" onClick={() => handleVerify('rejected')}>Reject Documents</Button>
+                        <Button onClick={() => handleVerify('verified')}>Approve ✓</Button>
                       </div>
                     )}
                     {selectedCustomer.document_status === 'verified' && (
